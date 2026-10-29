@@ -1,0 +1,47 @@
+{
+  "library_name": "",
+  "provider": "local",
+  "root_path": "",
+  "root_id": "",
+  "timezone": "",
+  "id_prefix": "REC",
+  "preferred_master_format": "markdown",
+  "default_layout": "editorial",
+  "volume_standard": "",
+  "categories": [
+    {
+      "key": "components",
+      "name": "Components",
+      "folder_id": "",
+      "relative_path": ""
+    },
+    {
+      "key": "dishes",
+      "name": "Dishes",
+      "folder_id": "",
+      "relative_path": ""
+    },
+    {
+      "key": "baking",
+      "name": "Baking",
+      "folder_id": "",
+      "relative_path": ""
+    }
+  ],
+  "drafts": {
+    "folder_id": "",
+    "relative_path": ""
+  },
+  "archive": {
+    "folder_id": "",
+    "relative_path": ""
+  },
+  "index_id": "",
+  "review_queue_id": "",
+  "approved_sop_references": [],
+  "required_export_formats": [
+    "pdf",
+    "xlsx"
+  ],
+  "pdf_paper_size": "A4"
+}

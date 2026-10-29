@@ -1,0 +1,23 @@
+# Local profiles and credentials
+*.local.json
+*.local.yaml
+.env
+.env.*
+!.env.example
+credentials*
+secrets*
+# Private recipe material and generated cards
+/private/
+/profiles/
+/uploads/
+/recipes/
+/exports/
+/receipts/
+/staging/
+/output/
+/outputs/
+# Local build caches
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
