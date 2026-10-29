@@ -1,0 +1,59 @@
+{
+  "_comment": "Blank template for a kitchen defaults record. Copy to kitchen-defaults.local.json OUTSIDE this public package, or keep it in a private profile location your cook points you at. Every value below is synthetic and illustrative: replace them with practices your own cook has actually confirmed. A default with no confirmation is a suggestion, and Miseform treats it as an ai proposal until the cook confirms it.",
+  "_format": "miseform-kitchen-defaults",
+  "_version": 1,
+  "kitchen": "",
+  "timezone": "",
+  "defaults": [
+    {
+      "id": "cooling-where-finished-product-is-held",
+      "field": "holding and cooling location",
+      "value": "",
+      "applies_when": "",
+      "confirmed_by": "",
+      "confirmed_on": "",
+      "notes": "Record where finished product is held. Point at the approved kitchen SOP rather than writing a temperature here; a numeric safety limit belongs to the SOP, not to this file."
+    },
+    {
+      "id": "house-setpoint-reference",
+      "field": "house temperature setpoint",
+      "value": "",
+      "applies_when": "",
+      "confirmed_by": "",
+      "confirmed_on": "",
+      "notes": "Name the setpoint or the equipment that holds it, and inherit it by reference. Do not record a numeric temperature that no chef stated."
+    },
+    {
+      "id": "equipment-on-hand",
+      "field": "equipment and vessels on hand",
+      "value": "",
+      "applies_when": "",
+      "confirmed_by": "",
+      "confirmed_on": "",
+      "notes": "List the equipment a recipe may assume without being asked about, one entry per practice."
+    },
+    {
+      "id": "vessel-and-container-conventions",
+      "field": "vessel, container and label conventions",
+      "value": "",
+      "applies_when": "",
+      "confirmed_by": "",
+      "confirmed_on": "",
+      "notes": "Record the container and label conventions the kitchen uses by default."
+    },
+    {
+      "id": "approved-sop-references",
+      "field": "approved kitchen SOP references",
+      "value": "",
+      "applies_when": "",
+      "confirmed_by": "",
+      "confirmed_on": "",
+      "notes": "Name the approved SOPs a recipe may cite. A default may point at an SOP; it may never replace one or turn a policy into a number."
+    }
+  ],
+  "_safety": [
+    "This record never supplies a numeric safety limit, a shelf life, an allergen status, an ingredient amount, a measured yield, or an approval.",
+    "Safety-critical facts come from the cook, from an approved SOP, or they stay unknown.",
+    "Anything the chef says about a single recipe overrides a default recorded here."
+  ]
+}
