@@ -73,15 +73,38 @@ class ExportResult:
 # ---------------------------------------------------------------- PDF export
 
 
+def _find_playwright_chromium() -> str | None:
+    """Return the Chromium build Playwright installed, if there is one.
+
+    ``playwright install chromium`` puts the browser in Playwright's own
+    cache — not on ``PATH`` and not in the macOS application folder — so the
+    exporter asks Playwright where it put it. A browser found this way is
+    driven exactly like a system Chrome.
+    """
+    try:
+        from playwright.sync_api import sync_playwright  # type: ignore
+    except Exception:  # pragma: no cover - environment dependent
+        return None
+    try:
+        with sync_playwright() as p:
+            path = p.chromium.executable_path
+    except Exception:  # pragma: no cover - environment dependent
+        return None
+    return path if path and Path(path).exists() else None
+
+
 def _find_chrome() -> str | None:
     for candidate in CHROME_CANDIDATES:
         if Path(candidate).exists():
             return candidate
-    return (
+    found = (
         shutil.which("google-chrome")
         or shutil.which("chromium")
         or shutil.which("chromium-browser")
     )
+    if found:
+        return found
+    return _find_playwright_chromium()
 
 
 def export_pdf(
@@ -645,9 +668,12 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     put(sheet.cell(row=row, column=3), usable_yield)
     sheet.cell(row=row, column=3).number_format = "0.0"
     sheet.cell(row=row, column=4, value="Loss (g)")
+    # Guard the subtraction: with no measured yield the input cell is empty,
+    # and an unguarded =C_total-C_yield recalculates in Excel to the full
+    # input mass, which would report a fabricated total loss.
     put_formula(
         sheet.cell(row=row, column=5),
-        f"=C{total_row}-C{row}",
+        f'=IF(ISNUMBER(C{row}),C{total_row}-C{row},"")',
         weight_sum - float(usable_yield) if usable_yield is not None else "",
     )
     sheet.cell(row=row, column=5).number_format = "0.0"

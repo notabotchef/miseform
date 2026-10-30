@@ -1,0 +1,43 @@
+# Miseform dependency manifest.
+#
+# This file declares what the packaged toolchain imports, so a clean machine
+# can reproduce the toolchain instead of inheriting whatever happens to be
+# installed on it.
+#
+# It is an install manifest, not a distribution. The package has no name, no
+# version, no entry points and no build backend, and nothing here is
+# published to a package index. `pip install -r requirements.txt` reads it
+# into one local environment and does nothing else.
+#
+# Format
+#   * One requirement per line, in `name>=lower,<upper` form.
+#   * Lines beginning with `#` are prose and are ignored by pip.
+#   * A requirement listed under the `# optional:` marker is NOT installed by
+#     `pip install -r requirements.txt`. The bundled installer
+#     (`scripts/install.py`) does install the optional set, and `--no-optional`
+#     turns that off. Either way the toolchain works without them.
+#
+# Required
+#   jsonschema  validates a card against references/card.schema.json
+#   openpyxl    writes the native .xlsx workbook
+#   playwright  drives the headless browser that renders the PDF
+#   pytest      runs the published test suite in tests/
+jsonschema>=4.18,<5
+openpyxl>=3.1,<4
+playwright>=1.44,<2
+pytest>=7.4,<9
+
+# Optional
+#   pypdf       fallback for reading the text layer back out of a finished
+#               PDF. The exporter prefers the `pdftotext` binary when the
+#               host has one and falls back to this module when it does not;
+#               scripts/exporter.py guards the import, so a missing pypdf
+#               never breaks an export. Install it only if the host has
+#               neither pdftotext nor a browser you can read text from.
+#   formulas    recalculates the workbook's own formulas in one published
+#               check, so the test suite can prove the .xlsx evaluates to
+#               the numbers the card claims. Test-only: nothing in
+#               scripts/ imports it. Without it that one check is skipped
+#               and the rest of the suite still runs and still passes.
+# optional: pypdf>=4.0,<7
+# optional: formulas>=1.3,<2
