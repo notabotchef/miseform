@@ -199,7 +199,8 @@ compact chef-facing record — ingredients, method, yield, and every value still
 unknown marked as unknown — and ends it with exactly "Is this correct, and
 should I generate the cards?" It then stops. No card, draft, PDF, Excel, or
 card-shaped artifact is produced at this point, and the agent does not describe
-the recipe as tested or approved.
+the recipe as tested or approved. The rule that governs this gate is stated
+once, in the execution contract in [SKILL.md](SKILL.md).
 
 **12. Generation only on request.** Reply to the review with "yes, generate the
 cards." Expected: the cards are built from the reviewed record, with the
@@ -348,7 +349,7 @@ point the agent at that file if you use one. Never put credentials in the
 profile.
 
 ## Chef-testing RC readiness plan
-See [references/rc-readiness.md](../references/rc-readiness.md) for the prioritized RC1 checklist, cross-agent test matrix, dependency/compatibility accounting, cost and privacy notes, installation guidance, and suggested next tickets. This file remains the local test specification; the RC plan is the readiness decision record.
+See [references/rc-readiness.md](references/rc-readiness.md) for the prioritized RC1 checklist, cross-agent test matrix, dependency/compatibility accounting, cost and privacy notes, installation guidance, and suggested next tickets. This file remains the local test specification; the RC plan is the readiness decision record.
 
 ## Sequential RC remediation plan
 See [references/rc-remediation-plan.md](references/rc-remediation-plan.md) for the staged, proof-gated remediation sequence: what each stage must reproduce before changing anything, the acceptance commands a reviewer re-runs, where the evidence is saved, and which stage releases the next one. Each stage is one implementation ticket plus one separate review ticket, and no stage starts until its own review passes.

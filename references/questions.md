@@ -12,6 +12,8 @@ The evidence labels used in that ledger and on the chef-facing record are the sa
 
 Each stage ends in a WAIT. The cook's reply is the gate that opens the next stage.
 
+This section is the authoritative statement of the canonical state flow. `SKILL.md`, `README.md` and `TESTING.md` summarize it and link back here, so the flow has one definition rather than several restatements.
+
 **START.** The cook activates the skill with nothing attached — the activation form is host-specific and is listed in [host compatibility](compatibility.md). Miseform replies with one line — "Send a photo of your written recipe, or paste the recipe and notes here." — and stops. The cook sends the recipe in the next message: a photo of the written recipe, or the recipe and notes pasted as text.
 
 **EXTRACT.** Miseform runs one bounded extraction pass and sends the legible transcription grouped by source block, plus at most 3 critical questions, then stops. Unreadable text is marked as unreadable, never transcribed confidently.
@@ -174,6 +176,8 @@ Unrelated blocks stay separate cards. Do not combine them into a single batch to
 
 ## Review gate
 
+This section describes the shape of the record Miseform shows. The rule that governs the gate — when to send it, how to end it, and what the reply does not authorize — is stated once, in the execution contract in [SKILL.md](../SKILL.md).
+
 Once the critical identity, quantities, and method are resolved, send the compact chef-facing record:
 
 - ingredients, grouped by component or source block, with quantities as confirmed,
@@ -182,8 +186,6 @@ Once the critical identity, quantities, and method are resolved, send the compac
 - every remaining value listed as explicitly unknown, with no placeholder dressed as an instruction.
 
 Then ask, verbatim: "Is this correct, and should I generate the cards?" And stop.
-
-This review is editorial confirmation of the record. It is not production validation, not a kitchen test, and not approval for release. Do not claim the recipe was tested. Do not wrap generated instructions in confirmation labels that make a guess look settled.
 
 ## No-answer path
 

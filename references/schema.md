@@ -28,6 +28,31 @@ This is the semantic contract for the card. `references/card.schema.json` is its
 | Test/release | Trial date, cook, scale, actual yield, observed endpoints/defects, adjustments, independent cook reproduction, approver and approval date |
 | Filing | Target folder ID, actual saved file ID/URL, version-specific retry key, local path, upload/index/queue/map states; timestamps |
 
+## Process controls
+
+Every card answers all eight processes — sous vide, combi oven, fermentation, pickling, reduction, emulsification, chilling, smoking. An applicable process carries its controlled parameters; an unused one states `N/A — reason`, never a bare `N/A`. The reading editions show only the applicable processes; every key and its reason stay in the card record.
+
+## Ingredient field mapping
+
+The ingredient schema is deliberately narrow. `references/card.schema.json` stores exactly five fields per ingredient row, and the wider field list in the table above is served by those five fields, not by extra properties:
+
+| Promised field | Where it lives |
+|---|---|
+| Stable row ID | stored: `row_id` |
+| name | stored: `name` |
+| net weight/unit | stored: `weight_g`, in grams; grams are the authority |
+| optional measured or source-supported volume/unit | stored: `volume` |
+| brand/specification | rides in `notes` |
+| prep state | rides in `notes` |
+| volume standard | rides in `notes`, together with the source title, URL, access date, ratio, units convention and proxy status |
+| reference scaling % | computed at render from the stored weights; never stored |
+| component | structural: the row's position under `components[]` |
+| notes and source | the `notes` property on the row; it is also the carrier for every promised field the row has no property for |
+
+The `notes` string is the documented carrier for every promised field the stored row has no property for, so provenance survives without widening the schema. Do not add `prep_state`, `volume_standard`, `volume_source` or `scaling_percent` properties and do not widen `additionalProperties`: the narrow row plus the notes convention is the contract, and a contributor who wants one of these fields records it in `notes`.
+
+Percentages are computed from the stored weights — reference percentage = 100 × ingredient mass / named reference mass within the component — and are never stored on the card. The scale factor is computed as target reference mass divided by base reference mass and is offered only under a validated batch range; `batch_factor` on a card records the factor the cook asked for, not a computed percentage.
+
 ## Arithmetic invariants
 
 - Reference percentage for ingredient i = 100 × ingredient mass / named reference mass within that component. For baker percentages use total flour mass, including flour in preferments only when the formula explicitly accounts for it; do not use baker percentages indiscriminately for non-baking recipes. Sum may exceed 100%. Never silently switch to percentage of total formula.
