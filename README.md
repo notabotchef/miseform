@@ -36,7 +36,44 @@ If you come back mid-way, Miseform treats the activation as a checkpoint, not a 
 
 ## Install
 
-Copy this complete `miseform` folder into your host's skill directory, preserving `SKILL.md`, `references/`, `templates/`, `scripts/`, `tests/` and `examples/`. The skill resolves its resources relative to the folder that holds `SKILL.md`, so there is no fixed install path to configure.
+### One command
+
+From the folder that holds `SKILL.md`, run:
+
+```
+python3 scripts/install.py
+```
+
+That single command does the whole setup: it checks that Python and the
+tools you need are present, creates an isolated environment for the
+dependencies, installs them from `requirements.txt`, installs the Chromium
+build used for the PDF edition, copies the skill into your host's skill
+folder, and prints the activation line for every supported host. It never
+writes to your system Python, never asks for `sudo`, and it is safe to run
+again — a second run updates what belongs to Miseform and leaves everything
+else alone.
+
+After it finishes, check what this machine can do:
+
+```
+python3 scripts/capability_check.py
+```
+
+It reports three things separately — schema validation, PDF export, and
+XLSX export — each as available or pending with the reason and the fix.
+It installs nothing and changes nothing.
+
+If you would rather install by hand, the same three steps are: create a
+virtual environment, `python3 -m pip install -r requirements.txt`, and
+`python3 -m playwright install chromium`. The manifest is the source of
+truth for what gets installed; the prose in this file never drifts from it.
+
+### Where the skill goes
+
+The skill resolves its resources relative to the folder that holds
+`SKILL.md`, so there is no fixed install path to configure. The installer
+copies the folder into the skill directory of every supported host it finds
+on your machine.
 
 | Host | Where it goes | How you activate it |
 |---|---|---|
@@ -50,6 +87,46 @@ OpenCode also reads `~/.claude/skills/`, `~/.agents/skills/`, and the project-le
 OpenCode's skill tool is a tool call, not a slash command: use the skill by name there, not `/miseform`. On every host, the fallback is the same — paste the recipe, or send the photo in your next message.
 
 Full detail, capability requirements, and the per-host notes are in [host compatibility](references/compatibility.md).
+
+### What is supported, and what is not
+
+Supported hosts are Codex, Claude Code, OpenCode and Hermes, plus any host
+that reads a skill folder in the Agent Skills layout. The toolchain itself
+is host-independent: same Python, same dependencies, same commands.
+
+Not supported, stated plainly:
+
+- **Not every platform is verified.** The install command is written for
+  macOS and Linux with Python 3.9 or newer. It has not been run on Windows,
+  and Windows paths are not handled.
+- **Not every host has been run live.** The install paths and activation
+  forms are read from each host's own documentation. Treat a host you have
+  not run yourself as unverified until you have.
+- **The PDF edition needs a browser.** Without Chrome, Chromium, Edge, or
+  the Chromium build Playwright installs, the PDF export is reported as
+  pending. The HTML, Markdown and Excel editions still work.
+- **Filing to a library is optional and needs your own credentials.** The
+  package ships no credentials and no library client. Filing stays pending
+  until you configure `recipe-library.local.json` — see
+  [Library configuration](#library-configuration).
+- **Miseform does not verify food safety and does not publish.** It
+  produces records; it does not approve them, and it does not upload
+  anything.
+
+### Optional steps
+
+The PDF edition and library filing are optional. Nothing else is.
+
+- **PDF (optional).** `python3 -m playwright install chromium` provides the
+  browser. A Chrome, Chromium or Edge you already have is found
+  automatically and used instead.
+- **PDF text layer (optional).** The exporter reads the text back out of a
+  finished PDF with the `pdftotext` binary when your machine has it, and
+  falls back to the optional `pypdf` module when it does not. Install
+  `pypdf` only if you have neither.
+- **Filing to a library (optional).** Needs a private
+  `recipe-library.local.json` with your own verified paths and credentials.
+  Nothing is filed without it, and nothing is filed automatically.
 
 ### What the host needs to provide
 

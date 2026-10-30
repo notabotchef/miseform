@@ -19,13 +19,32 @@ activation matrices and the capability table; this file holds the checks.
 | `playwright` (Python) plus Chrome or Chromium | rendering the PDF | the PDF export reports as pending |
 | `pytest` | running the test suite | only the tests are skipped |
 
-Install the Python dependencies into the interpreter you will use:
+The pinned versions live in `requirements.txt` at the package root. That
+manifest is the source of truth; this table describes what each dependency
+is for.
 
-    python3 -m pip install jsonschema openpyxl playwright pytest
-    python3 -m playwright install chromium
+Install the Python dependencies into an isolated environment:
+
+    python3 -m venv .venv
+    .venv/bin/python -m pip install -r requirements.txt
+    .venv/bin/python -m playwright install chromium
+
+Or let the installer do it, along with the skill copy and the host
+activation lines:
+
+    python3 scripts/install.py
 
 A local Google Chrome or Chromium installation also works; the exporter finds
-it automatically.
+it automatically. The PDF text layer is read back with `pdftotext` when the
+machine has it, and with the optional `pypdf` module when it does not.
+
+Check what the machine can actually do at any time — this installs nothing
+and changes nothing:
+
+    python3 scripts/capability_check.py
+
+It reports schema validation, PDF export and XLSX export separately, each as
+available or pending with the reason and the fix.
 
 ## Run the test suite
 
