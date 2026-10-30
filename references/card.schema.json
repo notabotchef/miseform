@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://miseform.local/schemas/recipe-card.schema.json",
   "title": "Miseform recipe card data",
-  "description": "Machine-readable form of the recipe-card field contract in references/schema.md. One document is the single source for the HTML reading edition, the PDF export and the Excel export, so both exports carry the same recipe ID, version, date, status, quantities, percentage bases, steps, controls and blockers.",
+  "description": "Machine-readable form of the recipe-card field contract in references/schema.md#recipe-card-field-contract. One document is the single source for the HTML reading edition, the PDF export and the Excel export, so both exports carry the same recipe ID, version, date, status, quantities, percentage bases, steps, controls and blockers.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -139,7 +139,7 @@
     "process_controls": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Controlled parameters for each applicable process, per references/operations.md section 5. A process that does not apply states N/A with the reason. The eight keys are the eight processes named in references/schema.md.",
+      "description": "Controlled parameters for each applicable process, per references/schema.md#process-controls. A process that does not apply states N/A with the reason. The eight keys are the eight processes named in references/schema.md#process-controls.",
       "required": [
         "sous_vide",
         "combi",
@@ -164,7 +164,7 @@
     "labeling": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Label content for an item that is stored or transferred. Required by references/validation.md when the card states how the product is held. An unresolved value is NEEDS CHEF CONFIRMATION, never a plausible default.",
+      "description": "Label content for an item that is stored or transferred. Required by references/validation.md#recipe-completeness when the card states how the product is held. An unresolved value is NEEDS CHEF CONFIRMATION, never a plausible default.",
       "required": [
         "product_name",
         "batch_or_date_code",

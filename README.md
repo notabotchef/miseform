@@ -14,6 +14,8 @@ Miseform is a questionnaire first and a document generator second. The canonical
 
     START -> EXTRACT -> INTERVIEW -> REVIEW -> BUILD
 
+The stages are defined once, in [the canonical path](references/questions.md#the-canonical-path). What follows is the plain-language version of what you see.
+
 **Start.** You activate the skill on its own. Miseform answers with one line — "Send a photo of your written recipe, or paste the recipe and notes here." — and stops there. You send the written-recipe photo, or paste the recipe and notes, in your next message.
 
 **Extract.** Miseform reads the recipe once and replies with the legible transcription grouped by source block, plus at most three critical questions, then waits. Nothing is created, exported, filed, or researched before you have answered. An empty activation never goes looking for a substitute recipe — not the shipped example, not an earlier photo, not your library — and never writes a file. If the recipe is already supplied with your request, Miseform uses it instead of asking again.
@@ -22,7 +24,7 @@ Miseform is a questionnaire first and a document generator second. The canonical
 
 **Proposals.** When what you supplied supports one specific value you never stated, Miseform offers it to you as a proposal, tells you what it inferred the value from, and waits. A proposal stays out of the method, the ingredient table, the yield, and the controls until you confirm it, and approving the record as a whole does not confirm it. It becomes a fact only when you say so. A value you expect but have not weighed stays an expectation, never a measured yield, and a number computed from your own weights stays arithmetic, never output. See [evidence labels, kitchen defaults, and proposals](references/evidence-and-defaults.md).
 
-**Review.** Once the identity, quantities, and method are resolved, Miseform sends you the compact record — ingredients, method, yield, and every value that is still explicitly unknown — and asks: "Is this correct, and should I generate the cards?" Then it waits for your actual reply. That reply is editorial confirmation of the record. It is not a kitchen test and not an approval for production.
+**Review.** Once the identity, quantities, and method are resolved, Miseform sends you the compact record — ingredients, method, yield, and every value that is still explicitly unknown — and asks: "Is this correct, and should I generate the cards?" Then it waits for your actual reply. The rule that governs this gate is stated once, in the execution contract in [SKILL.md](SKILL.md).
 
 **Build.** Miseform generates the cards only after you ask for it. A finished schema and an available exporter are not permission. If you do not answer, Miseform keeps a compact interview ledger — known facts, their source, the uncertainties, the next three questions — and waits. It does not produce a draft, a filled-in card, or a document with placeholders standing in for instructions.
 
@@ -127,15 +129,15 @@ That last one returns the transcription and its uncertainty. It creates nothing.
 
 ## Example intake and response
 
-**Input:** you activate the skill on its own, Miseform asks for the recipe, and you send in the next message: "Photo attached: toasted sesame and salt garnish in a small bowl. I mixed 100 g already-toasted sesame with 5 g fine salt. Roughly a teaspoon per plate. Make a card."
+**Input:** you activate the skill on its own, Miseform asks for the recipe, and you send in the next message: "Photo attached: toasted sesame and salt garnish in a small bowl. I mixed 100 g purchased roasted white sesame, 20 g roasted black sesame and 10 g fine salt. Crush lightly. About 2 g per plate. Make a card."
 
-**First response:** "From the notes I have 100 g already-toasted white sesame and 5 g fine salt, crushed lightly, about 2 g per plate. The photo adds appearance only — it cannot establish weights or yield. Three things I need: the measured usable yield, the weighed portion and crushing endpoint, and the approved storage and label rules."
+**First response:** "From the notes I have 100 g purchased roasted white sesame, 20 g roasted black sesame and 10 g fine salt, crushed lightly, about 2 g per plate. The photo adds appearance only — it cannot establish weights or yield. Three things I need: the measured usable yield, the confirmed portion weight and the crushing endpoint, and the approved storage and label rules."
 
 Then it waits. Your answers open the next round, and only the facts still missing are asked.
 
-**Review response:** after the method and quantities are settled, Miseform sends the compact record — 100 g already-toasted white sesame, 5 g fine salt, the crushing method as you described it, yield as confirmed or explicitly unknown, and any remaining unknown listed as unknown — and asks "Is this correct, and should I generate the cards?" It waits for your reply.
+**Review response:** after the method and quantities are settled, Miseform sends the compact record — 100 g purchased roasted white sesame, 20 g roasted black sesame and 10 g fine salt, the crushing method as you described it, yield as confirmed or explicitly unknown, and any remaining unknown listed as unknown — and asks "Is this correct, and should I generate the cards?" It waits for your reply.
 
-**After you ask for the cards:** Miseform groups sesame and salt in the ingredient table; shows 100% and 5% using sesame as the stated reference. It researches ingredient-specific gram-to-volume references for the sesame and the salt, then publishes the derived household measures marked `≈` with their source title, URL, access date, ratio, units convention and proxy status; leaves a dash only where no reliable match exists. Gram weights stay authoritative and input total stays at 105 g, and usable yield or portion stays pending if you have not confirmed it. The photo establishes appearance only. Sesame is recorded as an intentional allergen from the stated ingredient, cross-contact and label verification stay unresolved, and the card displays **NOT RELEASED FOR PRODUCTION**. Miseform does not invent storage duration and does not promote the draft because the card looks finished. The [HTML example](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.html) illustrates presentation; follow the evidence supplied with each actual recipe.
+**After you ask for the cards:** Miseform groups sesame and salt in the ingredient table; shows the reference percentages computed against the stated sesame basis — 100% for the 100 g white sesame row, 20% for the 20 g black sesame row and 10% for the 10 g salt row. It researches ingredient-specific gram-to-volume references for the sesame and the salt, then publishes the derived household measures marked `≈` with their source title, URL, access date, ratio, units convention and proxy status; leaves a dash only where no reliable match exists. Gram weights stay authoritative and input total stays at 130 g, and usable yield or portion stays pending if you have not confirmed it. The photo establishes appearance only. Sesame is recorded as an intentional allergen from the stated ingredient, cross-contact and label verification stay unresolved, and the card displays **NOT RELEASED FOR PRODUCTION**. Miseform does not invent storage duration and does not promote the draft because the card looks finished. The [HTML example](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.html) illustrates presentation; follow the evidence supplied with each actual recipe.
 
 ## What is included
 

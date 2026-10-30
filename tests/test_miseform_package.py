@@ -117,7 +117,11 @@ def test_public_package_carries_no_private_names_or_ids():
             continue
         if path.suffix.lower() in {".pdf", ".xlsx", ".png", ".jpg", ".zip"}:
             continue
-        if ".pytest_cache" in path.parts or "__pycache__" in path.parts:
+        if (
+            ".git" in path.parts
+            or ".pytest_cache" in path.parts
+            or "__pycache__" in path.parts
+        ):
             continue
         if path.name == Path(__file__).name:
             # This file holds the patterns themselves; it is scanned by the
@@ -152,6 +156,31 @@ def test_example_card_is_the_single_source_for_the_shipped_example(card: Card):
         artifact = ROOT / "examples" / f"{stem}{suffix}"
         assert artifact.exists(), f"missing built artifact {artifact.name}"
         assert artifact.stat().st_size > 0
+    # Stage 1 traceability: the README worked example must stay inside the
+    # shipped card's measured quantities, and must never turn a spoon measure
+    # into a gram production control. The scan is scoped to the worked-example
+    # section: prose elsewhere in the README may legitimately mention grams.
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "the whole working set" in readme, "the README must keep the working-set rule"
+    start = readme.index("## Example intake and response")
+    section = readme[start : readme.index("\n## ", start)]
+    spoons = re.findall(r"\d*\.?\d*\s*spoon\w*", section, re.IGNORECASE)
+    assert spoons == [], f"the README example must not use spoon measures: {spoons}"
+    card_weights: set[float] = set()
+    for component in card.components:
+        for ingredient in component.get("ingredients") or []:
+            weight = ingredient.get("weight_g")
+            if isinstance(weight, (int, float)):
+                card_weights.add(float(weight))
+    for key in ("input_total_g", "usable_yield_g", "loss_g", "portion_g"):
+        value = card.data.get(key)
+        if isinstance(value, (int, float)):
+            card_weights.add(float(value))
+    for match in re.finditer(r"(\d+(?:\.\d+)?)\s*g\b", section):
+        value = float(match.group(1))
+        assert value in card_weights, (
+            f"the README worked example states {value} g, which the shipped card does not carry"
+        )
 
 
 def test_example_card_is_json_and_matches_the_shipped_name():

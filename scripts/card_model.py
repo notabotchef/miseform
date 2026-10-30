@@ -135,6 +135,19 @@ _VOLUME_UNIT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The source status a row must state when it publishes a derived volume:
+# the figure is either an exact match or a labeled generic proxy.
+_SOURCE_STATUS_RE = re.compile(
+    r"\b(exact match|labeled proxy|labelled proxy|generic proxy|proxy)\b",
+    re.IGNORECASE,
+)
+
+# A source record in the notes: a source title, a URL, or an access date.
+_SOURCE_RECORD_RE = re.compile(
+    r"(https?://|source\s+\d|accessed\s+\d{4}-\d{2}-\d{2})",
+    re.IGNORECASE,
+)
+
 
 class CardError(ValueError):
     """The card document cannot be read as a card at all."""
@@ -324,6 +337,7 @@ class Card:
         out.extend(self._check_ingredient_coverage())
         out.extend(self._check_release_gating())
         out.extend(self._check_unverified_volumes())
+        out.extend(self._check_ingredient_notes_convention())
         out.extend(self._check_process_controls())
         out.extend(self._check_labeling())
         return out
@@ -566,6 +580,45 @@ class Card:
                         f"row {ing.get('row_id')!r} states a volume without a unit ({text!r}); "
                         "name the measure and its standard, for example 'cup (US)' or 'tbsp (US)'",
                         severity="warning",
+                        path="components",
+                    )
+                )
+        return out
+
+    def _check_ingredient_notes_convention(self) -> list[Finding]:
+        """The notes string carries what the narrow ingredient row cannot.
+
+        ``references/schema.md`` stores five fields per ingredient row and
+        carries every other promised field in the ``notes`` string. A row
+        that publishes a derived volume therefore has to say where that
+        volume came from and what its status is; a row whose notes carry a
+        source record has to publish the volume that record supports. The
+        narrow schema stays narrow — this check does not widen it.
+        """
+        out: list[Finding] = []
+        for ing in self.ingredients:
+            row_id = ing.get("row_id")
+            volume = str(ing.get("volume") or "").strip()
+            notes = str(ing.get("notes") or "").strip()
+            states_source = bool(_SOURCE_STATUS_RE.search(notes))
+            states_provenance = bool(_SOURCE_RECORD_RE.search(notes))
+
+            if volume.startswith("≈") and not states_source:
+                out.append(
+                    Finding(
+                        "unverified-volume",
+                        f"row {row_id!r} publishes a derived volume but its notes state no source "
+                        "status; the notes must say whether the figure is an exact match or a "
+                        "labeled generic proxy",
+                        path="components",
+                    )
+                )
+            if states_provenance and not volume:
+                out.append(
+                    Finding(
+                        "volume-source-record-without-volume",
+                        f"row {row_id!r} notes carry a source record but the row publishes no "
+                        "volume for it",
                         path="components",
                     )
                 )
