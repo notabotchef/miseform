@@ -356,10 +356,11 @@ def test_the_core_contract_is_stated_once_and_pointed_at():
         ("TESTING.md", testing),
         ("references/questions.md", questions),
     ):
-        assert (
-            "editorial confirmation of the record, not production validation"
-            not in text
-        ), f"{name} must not restate the review-gate rule; it must link to it"
+        # The rule is identified by its concept, not one exact wording, so a
+        # paraphrase of it is caught as well as a verbatim copy.
+        assert "editorial confirmation of the record" not in text, (
+            f"{name} must not restate the review-gate rule; it must link to it"
+        )
         assert "SKILL.md" in text, f"{name} must point at the review-gate rule"
 
     # The canonical question is pinned by the existing tests and stays put.
