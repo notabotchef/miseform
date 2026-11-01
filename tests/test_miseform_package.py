@@ -120,8 +120,13 @@ def test_public_package_carries_no_private_names_or_ids():
         if (
             ".git" in path.parts
             or ".pytest_cache" in path.parts
+            or ".mypy_cache" in path.parts
+            or ".ruff_cache" in path.parts
             or "__pycache__" in path.parts
         ):
+            # Build and tool caches are local artifacts, not package content.
+            # A developer who runs a type checker or a linter in this folder
+            # creates them, and they are never shipped.
             continue
         if path.name == Path(__file__).name:
             # This file holds the patterns themselves; it is scanned by the
