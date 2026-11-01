@@ -407,8 +407,10 @@ Two rules apply while you run the checklist:
 Verification status for this release: the install paths, activation forms, and
 capability expectations in [host compatibility](references/compatibility.md) are
 **documentation-verified** against each host's published documentation and
-source. The eight checks above are **specified but not live-tested on every
-host** — this release has not been run inside each host's UI. Run the checklist
+source. The eight checks above have been run on some hosts and not on others:
+[host results](references/host-results.md) records which host was exercised,
+with what agent, version, model and date, and the per-check result — the
+failures included. A host that was not run is unverified. Run the checklist
 per host and record the result before you rely on that host.
 
 ## Build a card from the proposal

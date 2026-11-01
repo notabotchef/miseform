@@ -560,25 +560,57 @@ def research_volume(
             reason += ": " + "; ".join(rejected_because)
         return VolumeResult(status="unresolved", unresolved_reason=reason, attempts=attempts)
 
-    # Two credible sources that disagree materially are a conflict the cook
-    # settles. The higher-ranked one is not quietly published.
+    # Two credible sources that agree on the ingredient and the preparation
+    # state but disagree materially on density are a conflict the cook
+    # settles: neither figure is published. Every rival is validated before
+    # its density is touched, so a source with no usable convention is
+    # rejected with a reason instead of raising on grams_per_ml. A later
+    # source never replaces the accepted one.
     for rival in candidates:
         if rival is accepted:
             continue
-        if _state_overlap(rival.state, state or "") == 0 and _state_overlap(
-            accepted.state, state or ""
-        ) == 0:
-            low, high = sorted((accepted.grams_per_ml, rival.grams_per_ml))
-            if high / low > CONFLICT_RATIO:
-                return VolumeResult(
-                    status="unresolved",
-                    unresolved_reason=(
-                        "two sources disagree materially on this ingredient "
-                        f"({accepted.original_ratio} against {rival.original_ratio}); "
-                        "the cook settles which product and state applies"
+        reason = _reject_reason(rival, state, brand)
+        if reason is not None:
+            attempts.append(
+                {
+                    "source_title": rival.title,
+                    "source_url": rival.url,
+                    "tier": rival.tier,
+                    "outcome": "rejected",
+                    "reason": reason,
+                }
+            )
+            continue
+        rival_overlap = _state_overlap(rival.state, state or "")
+        accepted_overlap = _state_overlap(accepted.state, state or "")
+        if rival_overlap == 0 or accepted_overlap == 0:
+            # The rival does not bear the state the card asked for, so it is
+            # not a same-state candidate and cannot open a density conflict.
+            continue
+        low, high = sorted((accepted.grams_per_ml, rival.grams_per_ml))
+        if high / low > CONFLICT_RATIO:
+            attempts.append(
+                {
+                    "source_title": rival.title,
+                    "source_url": rival.url,
+                    "tier": rival.tier,
+                    "outcome": "rejected",
+                    "reason": (
+                        "disagrees materially with the accepted source on "
+                        f"density ({accepted.original_ratio} against "
+                        f"{rival.original_ratio})"
                     ),
-                    attempts=attempts,
-                )
+                }
+            )
+            return VolumeResult(
+                status="unresolved",
+                unresolved_reason=(
+                    "two sources disagree materially on this ingredient "
+                    f"({accepted.original_ratio} against {rival.original_ratio}); "
+                    "the cook settles which product and state applies"
+                ),
+                attempts=attempts,
+            )
 
     text, amount, unit, convention = derive_volume(float(grams), accepted)
     provenance = accepted.provenance()
@@ -645,13 +677,6 @@ def _row_state(row: dict[str, Any]) -> str:
     return " ".join(parts)
 
 
-def _row_grams(row: dict[str, Any]) -> float | None:
-    weight = row.get("weight_g")
-    if isinstance(weight, (int, float)):
-        return float(weight)
-    return None
-
-
 def _has_supplied_quantity(row: dict[str, Any]) -> bool:
     quantity = row.get("quantity")
     return isinstance(quantity, dict) and quantity.get("amount") is not None
@@ -672,6 +697,14 @@ def apply_research(
     """
     records: list[dict[str, Any]] = []
     catalogue = list(sources) if sources is not None else load_sources()
+    # Resolve every row's mass once before any volume lookup: a stated
+    # weight_g wins, a formula is worked out from its base row, and a row
+    # with neither stays None so research reports it honestly instead of
+    # guessing a zero. card_model is imported here because it imports this
+    # module at its own top.
+    from card_model import Card  # noqa: PLC0415
+
+    resolved = Card(data).resolved_weights()
 
     for component in data.get("components", []) or []:
         for row in component.get("ingredients", []) or []:
@@ -680,7 +713,7 @@ def apply_research(
                 continue
             result = research_volume(
                 str(row.get("name", "")),
-                _row_grams(row),
+                resolved.get(row_id),
                 state=_row_state(row),
                 brand=None,
                 sources=catalogue,

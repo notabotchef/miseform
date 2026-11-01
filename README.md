@@ -6,7 +6,11 @@ A reusable agent skill that reads a cook's dish photo or notes, maps the whole p
 
 The default design feels like a carefully edited cookbook: expressive serif titles, quiet labels, warm paper, dark ink and a restrained clay accent. Grouped **Ingredient / Weight / Volume / Scaling %** tables and numbered cooking stages do the work. Space and typography organize the page; boxes are reserved for exceptional information. A classic ingredient/procedure layout is also specified for requests that need it.
 
-Release 4.0.0. Host-neutral: the same skill runs on Codex, Claude Code, OpenCode, and Hermes.
+Release 4.0.0. Host-neutral: the same skill runs on any host that follows the
+Agent Skills specification. Of the four named hosts, Codex, OpenCode and
+Hermes were exercised on one machine and Claude Code was not; the per-host
+record, including the failures, is in
+[host results](references/host-results.md).
 
 ## How a run works
 

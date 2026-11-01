@@ -11,11 +11,13 @@ This file is the only place host-specific detail belongs. The core in
 - **Documentation verified.** The install paths and activation forms below were
   read from the hosts' own published documentation and source. They are
   documented behavior, not a claim that this release was run inside each UI.
-- **Not live-tested on every host.** No host other than the one this package was
-  developed against has executed a live conversational run of release
-  3.3.0. The [smoke checklist](../TESTING.md#compatibility-smoke-checklist) is
-  the specification to check a host against. Treat an unrun host as unverified
-  until you have run the checklist yourself.
+- **Some hosts have a live recorded run; the rest do not.** The
+  [host results](host-results.md) record which hosts were exercised on one
+  machine, with the agent, its version, the model, the date and a per-check
+  result for each of the eight smoke checks — including the failures. A host
+  that was not run is unverified here, and that document says so in those
+  words. Treat an unrun host as unverified until you have run the checklist
+  yourself.
 - **The toolchain is host-independent.** The Python renderer, schema, and
   exporters are the same files on every host, and their output does not depend
   on the host. Only the conversation around them differs.
