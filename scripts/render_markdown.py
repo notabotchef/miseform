@@ -15,6 +15,7 @@ from card_model import (
     applicable_process_controls,
     format_percent,
     format_weight,
+    row_weight_label,
 )
 
 
@@ -82,7 +83,16 @@ def render_markdown(card: Card) -> str:
     lines.append("")
     lines.append("| INGREDIENT | WEIGHT | VOLUME | SCALING % |")
     lines.append("|---|---:|---:|---:|")
+    resolved = card.resolved_weights()
     for comp in card.components:
+        if isinstance(comp.get("linked"), dict):
+            link = comp.get("linked") or {}
+            lines.append(
+                f"| **{_md_escape(comp.get('name'))}** | linked "
+                f"{_md_escape(link.get('component_id'))} "
+                f"{_md_escape(link.get('version'))} | — | — |"
+            )
+            continue
         lines.append(f"| **{_md_escape(comp.get('name'))}** | | | |")
         for ing in comp.get("ingredients", []) or []:
             row_id = str(ing.get("row_id", ""))
@@ -92,8 +102,9 @@ def render_markdown(card: Card) -> str:
             notes = ing.get("notes")
             if notes:
                 name = f"{name} — {_md_escape(notes)}"
+            weight_text = row_weight_label(ing, resolved.get(row_id))
             lines.append(
-                f"| {row_id} {name} | {format_weight(ing.get('weight_g'))} | "
+                f"| {row_id} {name} | {weight_text} | "
                 f"{volume_text} | {format_percent(derived.percentages.get(row_id))} |"
             )
     lines.append(

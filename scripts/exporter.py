@@ -40,6 +40,7 @@ from card_model import (
     RELEASE_WARNING,
     Card,
     applicable_process_controls,
+    format_quantity,
     format_weight,
     join_blockers,
 )
@@ -577,8 +578,23 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     ingredient_rows: list[tuple[str, int]] = []
     row_weights: dict[int, float] = {}
     weight_sum = 0.0
+    resolved = card.resolved_weights()
     for comp in card.components:
         comp_name = str(comp.get("name", ""))
+        if isinstance(comp.get("linked"), dict):
+            # A linked component is not restated here, so it contributes no
+            # row and no mass to this card's totals.
+            link = comp.get("linked") or {}
+            group_cell = sheet.cell(row=row, column=2)
+            _set_text(
+                group_cell,
+                f"{comp_name} — linked {link.get('component_id')} {link.get('version')}",
+            )
+            group_cell.font = Font(name="Georgia", size=12, italic=True, color=ink)
+            for col in range(3, 6):
+                sheet.cell(row=row, column=col).fill = PatternFill("solid", fgColor=pale)
+            row += 1
+            continue
         # The group heading stays unmerged so the numeric columns remain
         # writable and the SUM range below contains only real cells.
         group_cell = sheet.cell(row=row, column=2)
@@ -602,13 +618,19 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
             name_cell.alignment = Alignment(wrap_text=True, vertical="center")
 
             weight_cell = sheet.cell(row=ing_row, column=3)
-            weight = float(ing.get("weight_g", 0.0))
-            put(weight_cell, weight)
-            weight_cell.number_format = "0.0"
+            weight = resolved.get(row_id)
+            if isinstance(weight, (int, float)):
+                put(weight_cell, float(weight))
+                weight_cell.number_format = "0.0"
+                row_weights[ing_row] = float(weight)
+                weight_sum += float(weight)
+            else:
+                # The mass is not established. An empty cell keeps the SUM
+                # honest; a zero would report a mass nobody weighed.
+                _set_text(weight_cell, format_quantity(ing.get("quantity")))
+                weight_cell.alignment = Alignment(horizontal="right", wrap_text=True)
             weight_cell.font = body_font
-            weight_cell.alignment = Alignment(horizontal="right")
-            row_weights[ing_row] = weight
-            weight_sum += weight
+            weight_cell.alignment = Alignment(horizontal="right", wrap_text=True)
 
             volume_cell = sheet.cell(row=ing_row, column=4)
             volume = ing.get("volume")
@@ -616,9 +638,9 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
             volume_cell.font = body_font
             volume_cell.alignment = Alignment(horizontal="right", wrap_text=True, vertical="center")
 
-            if row_id == ref_row_id:
+            if row_id == ref_row_id and isinstance(weight, (int, float)):
                 ref_cell = f"C{ing_row}"
-                ref_weight = weight
+                ref_weight = float(weight)
             ingredient_rows.append((row_id, ing_row))
             row += 1
 
@@ -629,7 +651,7 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
                     pct_cell,
                     f'=IF(ISNUMBER({ref_cell}),C{ing_row}/{ref_cell},"")',
                     (row_weights[ing_row] / ref_weight)
-                    if ref_weight
+                    if ref_weight and ing_row in row_weights
                     else "",
                 )
                 pct_cell.number_format = "0%"
@@ -857,8 +879,33 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
         name_cell.font = body_font
         name_cell.alignment = Alignment(wrap_text=True, vertical="center")
 
-        base_weight = row_weights.get(card_row, 0.0)
+        base_weight = row_weights.get(card_row)
         base_cell = scaling.cell(row=scale_row, column=3)
+        if base_weight is None:
+            # The mass is not established, so there is nothing to scale. The
+            # cell shows the quantity the cook gave and the scaled cell says
+            # so; a zero would report a mass nobody weighed.
+            put_formula(
+                base_cell,
+                f"='Recipe Card'!C{card_row}",
+                format_quantity(ing.get("quantity")),
+            )
+            base_cell.number_format = "General"
+            base_cell.font = body_font
+            base_cell.alignment = Alignment(horizontal="right", wrap_text=True)
+
+            pct_cell = scaling.cell(row=scale_row, column=4)
+            _set_text(pct_cell, "—")
+            pct_cell.font = body_font
+            pct_cell.alignment = Alignment(horizontal="right")
+
+            scaled_cell = scaling.cell(row=scale_row, column=5)
+            _set_text(scaled_cell, "Pending")
+            scaled_cell.font = body_font
+            scaled_cell.alignment = Alignment(horizontal="right")
+            scale_row += 1
+            continue
+
         put_formula(
             base_cell,
             f"='Recipe Card'!C{card_row}",
