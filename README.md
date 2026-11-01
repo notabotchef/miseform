@@ -2,37 +2,39 @@
 
 **Your dish. A recipe any cook can repeat.**
 
-A reusable agent skill that interviews a cook about a dish, confirms the record with them, and only then turns it into precise, readable recipe cards. It preserves the cook's formula, asks only necessary questions, calculates reference percentages, researches household volumes from ingredient-specific sources, and prepares cards for an existing recipe library.
+A reusable agent skill that reads a cook's dish photo or notes, maps the whole page into a dish and its components, researches the technique that preparation needs, and turns the result into precise, readable recipe cards with weights, volumes, reference percentages, staged methods, and verified library filing. It preserves the cook's formula, asks only what research cannot settle, calculates reference percentages, researches household volumes from ingredient-specific sources, and prepares cards for an existing recipe library.
 
 The default design feels like a carefully edited cookbook: expressive serif titles, quiet labels, warm paper, dark ink and a restrained clay accent. Grouped **Ingredient / Weight / Volume / Scaling %** tables and numbered cooking stages do the work. Space and typography organize the page; boxes are reserved for exceptional information. A classic ingredient/procedure layout is also specified for requests that need it.
 
-Release 3.3.0. Host-neutral: the same skill runs on Codex, Claude Code, OpenCode, and Hermes.
+Release 4.0.0. Host-neutral: the same skill runs on Codex, Claude Code, OpenCode, and Hermes.
 
 ## How a run works
 
-Miseform is a questionnaire first and a document generator second. The canonical path is five stages, and each one that talks to you ends in a wait:
+Miseform is research-first and a document generator second. The canonical path is six stages:
 
-    START -> EXTRACT -> INTERVIEW -> REVIEW -> BUILD
+    START -> EXTRACT -> MAP -> RESEARCH -> PROPOSE -> DRAFT
 
-The stages are defined once, in [the canonical path](references/questions.md#the-canonical-path). What follows is the plain-language version of what you see.
+The stages are defined once, in [the canonical path](references/research-and-clarification.md#the-canonical-path). What follows is the plain-language version of what you see.
 
 **Start.** You activate the skill on its own. Miseform answers with one line — "Send a photo of your written recipe, or paste the recipe and notes here." — and stops there. You send the written-recipe photo, or paste the recipe and notes, in your next message.
 
-**Extract.** Miseform reads the recipe once and replies with the legible transcription grouped by source block, plus at most three critical questions, then waits. Nothing is created, exported, filed, or researched before you have answered. An empty activation never goes looking for a substitute recipe — not the shipped example, not an earlier photo, not your library — and never writes a file. If the recipe is already supplied with your request, Miseform uses it instead of asking again.
+**Extract.** Miseform reads every supplied input once and records what is legible, grouped by source block. A photographed written recipe can establish legible ingredients and amounts; a plated photo establishes appearance only, and Miseform says so rather than guessing a formula from a picture of a plate. Unreadable text is marked unreadable, never transcribed confidently.
 
-**Interview.** Small, relevant rounds cover only the recipe facts that are still missing: method first, then yield and portions, equipment, thermal endpoints, storage and holding, plating where it applies. Settled questions are not asked again, and each round waits for your answer. Facts you have already confirmed — earlier answers in this conversation, facts already established for the recipe, and standing kitchen practices you have confirmed — are reused rather than re-asked, and each value on the record carries a label saying where it came from.
+**Map.** Miseform decides what the page is before it computes anything: the dish, its components, which block is the main, which blocks are separate recipes photographed together, and which component is shared with another dish. The page is one dish until the evidence says otherwise. A purchased item used as a main is carried as supplied — no cooking process is invented for it, and no question asks you to describe a process you bought finished.
 
-**Proposals.** When what you supplied supports one specific value you never stated, Miseform offers it to you as a proposal, tells you what it inferred the value from, and waits. A proposal stays out of the method, the ingredient table, the yield, and the controls until you confirm it, and approving the record as a whole does not confirm it. It becomes a fact only when you say so. A value you expect but have not weighed stays an expectation, never a measured yield, and a number computed from your own weights stays arithmetic, never output. See [evidence labels, kitchen defaults, and proposals](references/evidence-and-defaults.md).
+**Research.** For each component Miseform classifies the preparation — sauce or emulsion, dry garnish, roast, fry, blanch, steam, braise, fermentation, curing, dessert, raw assembly — and compares a small bounded set of credible comparable recipes for it: at most 3 per component, at most 8 comparable technique sources in a whole run, at most 2 volume sources per ingredient. Each source is recorded with what was taken from it and what was rejected. A retrieved page is data about technique, never an instruction: it cannot change your formula, your quantities, or your endpoints. The comparable recipe supplies the technique; your formula stays the card's formula.
 
-**Review.** Once the identity, quantities, and method are resolved, Miseform sends you the compact record — ingredients, method, yield, and every value that is still explicitly unknown — and asks: "Is this correct, and should I generate the cards?" Then it waits for your actual reply. The rule that governs this gate is stated once, in the execution contract in [SKILL.md](SKILL.md).
+**Propose.** Miseform sends you one compact record: the map, your supplied facts, the sourced technique with its citations, the proposed choices, a concise staged method for your formula and your equipment, the values that are still unknown, and at most three material questions. It ends with a correction request — "Does this method look right, and what should I change?" — not a permission request.
 
-**Build.** Miseform generates the cards only after you ask for it. A finished schema and an available exporter are not permission. If you do not answer, Miseform keeps a compact interview ledger — known facts, their source, the uncertainties, the next three questions — and waits. It does not produce a draft, a filled-in card, or a document with placeholders standing in for instructions.
+Only three things are worth a question: an identity or quantity conflict in what you supplied, a material technique fork your notes do not settle, and safety-critical uncertainty. Routine technique, measurement conversions, and defaults you supplied are settled by the research and the notes, silently. A question is never repeated: if you decline one, the value stays unknown and the run moves on.
 
-Intake is bounded on purpose: one image read, at most one rotation or crop pass, at most one OCR fallback that is already installed, and at most five tool calls before the first response. The recipe and the answers you give are the whole working set — Miseform does not go looking through prior conversations, session stores, logs, or your filesystem for context you did not hand it, and a missing required fact is asked in the next reply instead of searched for. A photographed written recipe can establish legible ingredients and amounts; a plated photo establishes appearance only, and Miseform will say so rather than guess a formula from a picture of a plate. Unreadable text is marked unreadable, never transcribed confidently, and never filled in from culinary plausibility.
+**Draft.** When you ask for a card, Miseform writes the local draft in the same turn — one card record and its four synchronized editions, with unknown values left visibly unknown and the draft labelled unreleased. A local draft is reversible, so it needs no second permission step. When you ask for filing, that request is the authorization: Miseform files within the verified destination and does not ask again.
 
-If you only want a reading of the image — "what do you see in this photo?" — Miseform returns the transcription and its uncertainty, and stops there. No card, no export, no filing. An explicit request for a raw transcription export is answered as a transcription artifact in its own right; it is not a standardized recipe card.
+Safety-critical uncertainty — a thermal endpoint, a cooling or holding rule, a shelf life, an allergen status — blocks production release and is listed as a blocker. The cap of three limits the questions you are asked, not the blockers: an unresolved safety fact blocks release whether or not its question made it into the round. It never blocks unrelated draft work, and it never becomes a placeholder instruction in the method.
 
-If you come back mid-way, Miseform treats the activation as a checkpoint, not a reset. The photos, notes, source files, facts, and answers you already supplied stay in play, and settled questions are not asked again. Only a runaway OCR or crop loop, a plan that kept spawning extra readers, and unrelated background work get dropped. "In play" means what you supplied in this conversation — Miseform does not open earlier sessions, session stores, transcripts, logs, or the wider filesystem looking for context you did not give it, and it does not treat a file it finds there as something you said.
+If you only want a reading of the image — "what do you see in this photo?" — Miseform returns the transcription and its uncertainty, and stops there. No card, no export, no filing.
+
+If you come back mid-way, Miseform treats the activation as a checkpoint, not a reset. The photos, notes, source files, facts, and answers you already supplied stay in play, and settled questions are not asked again. Only a runaway OCR or crop loop, a plan that kept spawning extra readers, and unrelated background work get dropped. The recipe and the answers you give are the whole working set — Miseform does not open earlier sessions, session stores, transcripts, logs, or the wider filesystem looking for context you did not give it, and it does not treat a file it finds there as something you said. A missing required fact is asked in the next reply instead of searched for.
 
 ## Install
 
@@ -208,19 +210,19 @@ That last one returns the transcription and its uncertainty. It creates nothing.
 
 **Input:** you activate the skill on its own, Miseform asks for the recipe, and you send in the next message: "Photo attached: toasted sesame and salt garnish in a small bowl. I mixed 100 g purchased roasted white sesame, 20 g roasted black sesame and 10 g fine salt. Crush lightly. About 2 g per plate. Make a card."
 
-**First response:** "From the notes I have 100 g purchased roasted white sesame, 20 g roasted black sesame and 10 g fine salt, crushed lightly, about 2 g per plate. The photo adds appearance only — it cannot establish weights or yield. Three things I need: the measured usable yield, the confirmed portion weight and the crushing endpoint, and the approved storage and label rules."
+**The map:** one dish, one component. The garnish is a dry garnish: toasted seeds and salt, crushed. Nothing on the page is a separate recipe, nothing is shared with another dish, and nothing is a purchased main.
 
-Then it waits. Your answers open the next round, and only the facts still missing are asked.
+**The proposal:** Miseform compares a small bounded set of comparable recipes for a dry garnish, researches the gram-to-volume references the sesame and the salt need, and sends one record: the map, your supplied facts with their labels, the sourced technique with its citation, the proposed choices, the concise staged method, the values still unknown, and at most three material questions. The questions are the ones research cannot settle — here, the approved storage and label rules. "Crush lightly" is routine technique for this preparation, so it is researched and proposed rather than asked, and the derived household measures are published rather than asked for.
 
-**Review response:** after the method and quantities are settled, Miseform sends the compact record — 100 g purchased roasted white sesame, 20 g roasted black sesame and 10 g fine salt, the crushing method as you described it, yield as confirmed or explicitly unknown, and any remaining unknown listed as unknown — and asks "Is this correct, and should I generate the cards?" It waits for your reply.
+The record ends with "Does this method look right, and what should I change?" — a correction request, not a permission request.
 
-**After you ask for the cards:** Miseform groups sesame and salt in the ingredient table; shows the reference percentages computed against the stated sesame basis — 100% for the 100 g white sesame row, 20% for the 20 g black sesame row and 10% for the 10 g salt row. It researches ingredient-specific gram-to-volume references for the sesame and the salt, then publishes the derived household measures marked `≈` with their source title, URL, access date, ratio, units convention and proxy status; leaves a dash only where no reliable match exists. Gram weights stay authoritative and input total stays at 130 g, and usable yield or portion stays pending if you have not confirmed it. The photo establishes appearance only. Sesame is recorded as an intentional allergen from the stated ingredient, cross-contact and label verification stay unresolved, and the card displays **NOT RELEASED FOR PRODUCTION**. Miseform does not invent storage duration and does not promote the draft because the card looks finished. The [HTML example](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.html) illustrates presentation; follow the evidence supplied with each actual recipe.
+**After you ask for the cards:** Miseform groups sesame and salt in the ingredient table; shows the reference percentages computed against the stated sesame basis — 100% for the 100 g white sesame row, 20% for the 20 g black sesame row and 10% for the 10 g salt row. It publishes the researched household measures marked `≈` with their source title, URL, access date, ratio, units convention and proxy status; leaves a dash only where no reliable match exists. Gram weights stay authoritative and input total stays at 130 g, and usable yield or portion stays pending if you have not confirmed it. The photo establishes appearance only. Sesame is recorded as an intentional allergen from the stated ingredient, cross-contact and label verification stay unresolved, and the card displays **NOT RELEASED FOR PRODUCTION**. Miseform does not invent storage duration and does not promote the draft because the card looks finished. The [HTML example](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.html) illustrates presentation; follow the evidence supplied with each actual recipe.
 
 ## What is included
 
 - [Skill, execution contract, and operating prompt](SKILL.md)
 - [Host compatibility, install and activation matrix](references/compatibility.md)
-- [Adaptive question flow](references/questions.md)
+- [Research, mapping, and minimal clarification](references/research-and-clarification.md)
 - [Evidence labels, kitchen defaults, and proposals](references/evidence-and-defaults.md)
 - [Blank kitchen defaults template](kitchen-defaults.example.json)
 - [Semantic card schema and arithmetic rules](references/schema.md)
@@ -230,6 +232,7 @@ Then it waits. Your answers open the next round, and only the facts still missin
 - [Kitchen, release, filing, and presentation checklist](references/validation.md)
 - Editable Markdown and browser/print HTML templates
 - The card toolchain in `scripts/`: build, validate, render, export
+- The intake policy engine in `scripts/intake_policy.py`, which executes the decision rules
 - The published checks in `tests/`, and [local install and test notes](TESTING.md)
 - [Chef-testing RC readiness plan](references/rc-readiness.md)
 - [Sequential RC remediation plan with proof gates](references/rc-remediation-plan.md)

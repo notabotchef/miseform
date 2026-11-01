@@ -24,7 +24,7 @@ This is the semantic contract for the card. `references/card.schema.json` is its
 | Allergens | Intentional allergens per ingredient and component; label verification evidence; cross-contact controls; unresolved labels; no unsupported free-from claims |
 | Substitutions[] | Approved replacement, ratio, functional changes, method changes, allergen changes, test/approval evidence; otherwise none approved |
 | Components[] | Stable ID, exact version, link, quantity used, status; an assembly cannot be released with unresolved critical component specifications |
-| Provenance[] | Source note/photo/document link and date; evidence kind: chef-stated / chef-confirmed default / calculated / expected (unmeasured) / measured / photo-observed / ai proposal / unknown; conflicts and resolution |
+| Provenance[] | Source note/photo/document link and date; evidence kind: chef-stated / chef-confirmed default / calculated / expected (unmeasured) / measured / sourced technique / photo-observed / ai proposal / unknown; conflicts and resolution |
 | Test/release | Trial date, cook, scale, actual yield, observed endpoints/defects, adjustments, independent cook reproduction, approver and approval date |
 | Filing | Target folder ID, actual saved file ID/URL, version-specific retry key, local path, upload/index/queue/map states; timestamps |
 
