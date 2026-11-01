@@ -149,13 +149,8 @@ def test_the_readme_example_states_only_values_that_trace_to_a_source():
     section = readme[start : readme.index("\n## ", start)]
 
     quoted_input = re.search(r"\*\*Input:\*\*.*?\"([^\"]+)\"", section, re.DOTALL)
-    quoted_response = re.search(
-        r"\*\*First response:\*\*.*?\"([^\"]+)\"", section, re.DOTALL
-    )
     assert quoted_input, "the README example must quote the cook's input"
-    assert quoted_response, "the README example must quote the first response"
     source_text = quoted_input.group(1)
-    response_text = quoted_response.group(1)
 
     card = load_card(EXAMPLE)
     card_values = card_numbers(card)
@@ -167,14 +162,7 @@ def test_the_readme_example_states_only_values_that_trace_to_a_source():
         f"the README example input states {untraceable_input}, which the shipped card does not carry"
     )
 
-    # Nothing in the response is a number the cook did not state and the
-    # card does not carry.
-    untraceable_response = sorted(numbers(response_text) - input_values - card_values)
-    assert untraceable_response == [], (
-        f"the README example response states {untraceable_response}, which no source supplies"
-    )
-
-    # The rest of the example section states card quantities only.
+    # Nothing in the example states a number no source supplies.
     prose = strip_links(section)
     untraceable_section = sorted(numbers(prose) - input_values - card_values)
     assert untraceable_section == [], (
@@ -183,13 +171,13 @@ def test_the_readme_example_states_only_values_that_trace_to_a_source():
 
     # A spoon measure is never silently converted into grams.
     spoon = re.compile(r"\b(?:teaspoons?|tablespoons?|tbsp|tsp|spoons?)\b", re.IGNORECASE)
-    assert not spoon.search(response_text), (
-        "the README example response must not restate a spoon measure"
+    assert not spoon.search(prose), (
+        "the README example must not restate a spoon measure"
     )
     if spoon.search(source_text):
         input_grams = set(re.findall(r"(\d+(?:\.\d+)?)\s*g\b", source_text))
         for amount, portion in re.findall(
-            r"(\d+(?:\.\d+)?)\s*g\s+per\s+(\w+)", response_text, re.IGNORECASE
+            r"(\d+(?:\.\d+)?)\s*g\s+per\s+(\w+)", prose, re.IGNORECASE
         ):
             assert amount in input_grams, (
                 f"the README example converts a spoon measure into {amount} g per {portion}"
@@ -308,76 +296,78 @@ def test_the_shipped_card_demonstrates_the_notes_convention():
     )
 
 
-# ------------------------------------------- one authoritative home
+# ------------------------------------------------- one authoritative home
 
 
 # The four documents that used to restate the same two normative rules. The
-# canonical state flow and the review gate now have one home each, and the
-# other documents point at it.
-CORE_DOCS = ("SKILL.md", "README.md", "TESTING.md", "references/questions.md")
+# canonical state flow and the proposal question now have one home each, and
+# the other documents point at it.
+CORE_DOCS = ("SKILL.md", "README.md", "TESTING.md", "references/research-and-clarification.md")
+
+# The question Miseform ends its proposal with. It is the correction
+# request, not a permission request.
+PROPOSAL_QUESTION = "Does this method look right, and what should I change?"
 
 
 def test_the_core_contract_is_stated_once_and_pointed_at():
-    """The canonical state flow and the review gate each have one home.
+    """The canonical state flow and the proposal question each have one home.
 
-    The stage bullets and the review-gate rule used to be restated in
+    The stage bullets and the proposal rule used to be restated in
     ``SKILL.md``, ``README.md``, ``TESTING.md`` and
     ``references/questions.md``. A rule stated in four places is a rule that
     drifts in four places, so each rule now lives in one document and the
-    others link to it. The verbatim question the tests pin still appears
-    wherever the test requires it.
+    others link to it.
     """
     skill = read("SKILL.md")
     readme = read("README.md")
     testing = read("TESTING.md")
-    questions = read("references/questions.md")
+    reference = read("references/research-and-clarification.md")
 
-    # 1. The canonical state flow lives in references/questions.md.
-    assert "## The canonical path" in questions, (
-        "questions.md must hold the canonical path section"
+    # 1. The canonical state flow lives in the research reference.
+    assert "## The canonical path" in reference, (
+        "the research reference must hold the canonical path section"
     )
     for name, text in (("SKILL.md", skill), ("README.md", readme)):
-        assert "questions.md#the-canonical-path" in text, (
+        assert "research-and-clarification.md#the-canonical-path" in text, (
             f"{name} must point at the canonical path instead of restating it"
         )
         # The per-stage bullet list was the restatement; it must not return.
-        for stage in ("START", "EXTRACT", "INTERVIEW", "REVIEW", "BUILD"):
+        for stage in ("START", "EXTRACT", "MAP", "RESEARCH", "PROPOSE", "DRAFT"):
             assert f"**{stage}** —" not in text, (
                 f"{name} must not restate the canonical path as stage bullets"
             )
 
-    # 2. The review gate rule lives in the SKILL.md execution contract.
+    # 2. The proposal rule lives in the SKILL.md execution contract.
     assert (
-        "This review is editorial confirmation of the record, not production "
-        "validation and not approval." in skill
-    ), "SKILL.md must hold the authoritative review-gate rule"
+        "Propose the method, do not make the cook dictate it"
+        in skill
+    ), "SKILL.md must hold the authoritative proposal rule"
     for name, text in (
         ("README.md", readme),
         ("TESTING.md", testing),
-        ("references/questions.md", questions),
+        ("references/research-and-clarification.md", reference),
     ):
         # The rule is identified by its concept, not one exact wording, so a
         # paraphrase of it is caught as well as a verbatim copy.
-        assert "editorial confirmation of the record" not in text, (
-            f"{name} must not restate the review-gate rule; it must link to it"
+        assert "do not make the cook dictate it" not in text, (
+            f"{name} must not restate the proposal rule; it must link to it"
         )
-        assert "SKILL.md" in text, f"{name} must point at the review-gate rule"
+        assert "SKILL.md" in text, f"{name} must point at the proposal rule"
 
     # The canonical question is pinned by the existing tests and stays put.
-    question = "Is this correct, and should I generate the cards?"
     for name, text in (
         ("SKILL.md", skill),
         ("README.md", readme),
         ("TESTING.md", testing),
-        ("references/questions.md", questions),
+        ("references/research-and-clarification.md", reference),
     ):
-        assert question in text, f"{name} must keep the verbatim review question"
+        assert PROPOSAL_QUESTION in text, f"{name} must keep the verbatim proposal question"
 
     # The links that replace the restatements must resolve inside the package.
     for rel, text in (("SKILL.md", skill), ("README.md", readme)):
         for target in re.findall(r"\]\((references/[^)#]+\.md)(?:#[^)]*)?\)", text):
             assert (ROOT / target).is_file(), f"{rel} links a missing file: {target}"
-    for target in re.findall(r"\]\((\.\./SKILL\.md)\)", questions):
+    for target in re.findall(r"\]\((\.\./SKILL\.md)\)", reference):
         assert (ROOT / "references" / target).resolve().is_file(), (
-            "questions.md links a missing file: SKILL.md"
+            "the research reference links a missing file: SKILL.md"
         )

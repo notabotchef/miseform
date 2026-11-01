@@ -9,8 +9,8 @@ own instruction documents and shipped assets and asserts that:
 2. A confirmed kitchen default is reused rather than re-asked, and it is
    never invented, never sourced from the host, and never carried across
    kitchens.
-3. An inference is offered as a labeled proposal, states its basis, and waits
-   for the chef's confirmation before it can be used as fact.
+3. An inference is offered as a labeled proposal, states its basis, and stays
+   labeled until the chef confirms it.
 4. A guess, a calculation, and an unmeasured expectation are never presented
    as a measured fact.
 5. Safety-critical facts are never closed by a default, a proposal, or
@@ -43,7 +43,7 @@ INSTRUCTION_DOCS = [
     "SKILL.md",
     "README.md",
     "TESTING.md",
-    "references/questions.md",
+    "references/research-and-clarification.md",
     "references/evidence-and-defaults.md",
     "references/compatibility.md",
     "references/validation.md",
@@ -52,6 +52,17 @@ INSTRUCTION_DOCS = [
 
 
 def read(rel: str) -> str:
+    """The document with its line wrapping collapsed to single spaces.
+
+    Markdown wraps prose at a fixed width, so a phrase that spans two lines
+    is not a contiguous substring of the file. Collapsing the whitespace
+    lets a check name the phrase rather than the line it happened to land on.
+    """
+    return re.sub(r"\s+", " ", (ROOT / rel).read_text(encoding="utf-8"))
+
+
+def read_raw(rel: str) -> str:
+    """The document exactly as it is on disk, for line-oriented checks."""
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
@@ -64,6 +75,7 @@ EVIDENCE_LABELS = [
     "calculated",
     "expected (unmeasured)",
     "measured",
+    "sourced technique",
     "ai proposal",
     "unknown",
     "photo-observed",
@@ -71,44 +83,39 @@ EVIDENCE_LABELS = [
 
 
 def test_every_evidence_label_is_defined_in_the_shared_core():
-    """The full label vocabulary is stated in the core, the question flow, and
-    the reference document, so no kitchen inherits a different set.
+    """The full label vocabulary is stated in the core, the research
+    reference, and the reference document, so no kitchen inherits a
+    different set.
 
     Each label must appear as a definition, not merely as a word somewhere in
-    the prose: the question flow lists them as bullets and the reference
-    document lists them as a table row.
+    the prose: the reference document lists them as table rows.
     """
     for label in EVIDENCE_LABELS:
-        definitions = [
+        rows = [
             line
-            for line in read("references/questions.md").splitlines()
-            if line.startswith(f"- `{label}` —")
+            for line in read_raw("references/evidence-and-defaults.md").splitlines()
+            if line.startswith(f"| `{label}` |")
         ]
-        assert len(definitions) == 1, (
-            f"questions.md must define {label!r} exactly once"
+        assert len(rows) == 1, (
+            f"evidence-and-defaults.md must define {label!r} exactly once"
         )
-        definition = definitions[0]
+        definition = rows[0]
         assert not re.search(
             r"\(definition removed\)|\bTBD\b|\bTODO\b|\bXXX\b|\(removed\)",
             definition,
             re.IGNORECASE,
-        ), f"questions.md must give {label!r} a real definition, not a stub"
-        body = definition.split("—", 1)[1].split()
+        ), f"evidence-and-defaults.md must give {label!r} a real definition, not a stub"
+        body = definition.split("|")[2].split()
         assert len(body) >= 8, (
-            f"questions.md must give {label!r} a definition of at least 8 words, "
-            f"got {len(body)}"
+            f"evidence-and-defaults.md must give {label!r} a definition of at least "
+            f"8 words, got {len(body)}"
         )
-        assert f"| `{label}` |" in read("references/evidence-and-defaults.md"), (
-            f"evidence-and-defaults.md must define {label!r} as a table row"
-        )
-    skill = read("SKILL.md")
-    for label in EVIDENCE_LABELS:
-        assert f"`{label}`" in skill, f"SKILL.md must name the {label!r} label"
+        assert f"`{label}`" in read("SKILL.md"), f"SKILL.md must name the {label!r} label"
 
 
 def test_the_field_contract_carries_the_label_vocabulary():
     """The card's provenance field lists the same evidence kinds, so a card
-    record cannot carry a label the questionnaire never produces."""
+    record cannot carry a label the skill never produces."""
     schema = read("references/schema.md")
     for label in EVIDENCE_LABELS:
         assert label in schema, f"schema.md must list the {label!r} evidence kind"
@@ -125,21 +132,35 @@ def test_each_label_states_what_it_licenses_and_what_it_forbids():
         assert f"`{label}`" in text, f"the reference document must define {label!r}"
 
 
-def test_the_ledger_and_the_review_record_carry_the_label():
+def test_the_ledger_and_the_proposal_carry_the_label():
     """The interview ledger and the chef-facing record both carry a label, so a
     value never reaches the cook without its provenance."""
-    questions = read("references/questions.md")
+    reference = read("references/research-and-clarification.md")
     skill = read("SKILL.md")
     assert (
         "field, known value, source, evidence label, unresolved issue, release impact"
-        in questions
+        in reference
     ), "the ledger must record an evidence label for each value"
     assert "Each value carries its evidence label" in skill, (
-        "the review gate must carry an evidence label for each value"
+        "the proposal must carry an evidence label for each value"
     )
     assert "proposal is listed separately" in skill, (
         "a proposal must be listed separately from the confirmed values"
     )
+
+
+def test_sourced_technique_licenses_technique_and_never_a_formula():
+    """The label added for research draws a line the old vocabulary lacked:
+    a comparable recipe supplies technique, never the cook's ingredients."""
+    evidence = read_raw("references/evidence-and-defaults.md")
+    row = next(
+        line
+        for line in evidence.splitlines()
+        if line.startswith("| `sourced technique` |")
+    )
+    assert "technique" in row
+    for forbidden in ("an ingredient", "a quantity", "a brand", "a yield"):
+        assert forbidden in row, f"the row must forbid {forbidden!r}"
 
 
 # ------------------------------------------------------- reuse of defaults
@@ -147,16 +168,16 @@ def test_the_ledger_and_the_review_record_carry_the_label():
 
 def test_a_confirmed_default_is_reused_not_re_asked():
     """The settled facts of a kitchen are read, not re-questioned."""
-    for rel in ("SKILL.md", "references/questions.md"):
+    for rel in ("SKILL.md", "references/evidence-and-defaults.md"):
         text = read(rel)
         assert "confirmed kitchen default" in text, (
             f"{rel} must name confirmed kitchen defaults as a source of settled facts"
         )
-    questions = read("references/questions.md")
-    assert "## Reuse what the cook already settled" in questions, (
-        "the question flow must have a section for reusing settled facts"
+    evidence = read("references/evidence-and-defaults.md")
+    assert "## Reading a kitchen defaults record" in evidence, (
+        "the reference document must have a section for reading a defaults record"
     )
-    assert "none of them is asked again" in questions, (
+    assert "the answer is not asked again" in evidence, (
         "settled facts must not be asked again"
     )
 
@@ -164,34 +185,35 @@ def test_a_confirmed_default_is_reused_not_re_asked():
 def test_a_default_is_never_invented_or_hunted_for():
     """A default comes from the cook. Miseform never goes looking for one and
     never infers one, so the mechanism cannot drift into host exploration."""
-    questions = read("references/questions.md")
+    evidence = read("references/evidence-and-defaults.md")
     skill = read("SKILL.md")
     assert (
-        "It never goes looking for one, never infers one" in questions
-    ), "questions.md must forbid hunting for or inventing a default"
+        "Miseform reads a defaults record only when the cook supplies it" in evidence
+    ), "the reference document must forbid hunting for a defaults record"
     assert (
         "Miseform never goes looking for a defaults record" in skill
     ), "SKILL.md must forbid hunting for a defaults record"
     assert (
-        "never carries a default from another kitchen into this one" in questions
+        "it never carries a default from another kitchen into this one" in evidence
     ), "a default must not be carried across kitchens"
 
 
 def test_a_default_without_confirmation_is_a_proposal():
     """An unconfirmed entry is a suggestion, not a default."""
-    questions = read("references/questions.md")
+    evidence = read("references/evidence-and-defaults.md")
     assert (
-        "A default with no confirmation is a suggestion" in questions
+        "A default with no confirmation is a suggestion" in evidence
     ), "an unconfirmed default must be treated as a proposal"
 
 
 def test_the_chef_overrides_a_default_without_a_correction():
     """The chef's statement for this recipe is the newest statement, not an
     error to reconcile."""
-    questions = read("references/questions.md")
-    assert "Anything the cook says about this recipe overrides a default" in questions, (
-        "a per-recipe chef statement must override a default"
-    )
+    evidence = read("references/evidence-and-defaults.md")
+    assert (
+        "A default is overridden by anything the chef says about this recipe"
+        in evidence
+    ), "a per-recipe chef statement must override a default"
 
 
 def test_the_defaults_template_ships_blank():
@@ -231,46 +253,47 @@ def test_the_core_documents_the_defaults_record_as_optional():
 # ------------------------------------------------------------- proposals
 
 
-def test_a_proposal_is_labeled_states_its_basis_and_waits():
+def test_a_proposal_is_labeled_states_its_basis_and_is_asked_about():
     """A proposal carries its label, its basis, and a question."""
-    for rel in ("SKILL.md", "references/questions.md"):
+    for rel in ("SKILL.md", "references/evidence-and-defaults.md"):
         text = read(rel)
         assert "ai proposal" in text, f"{rel} must use the ai proposal label"
-    questions = read("references/questions.md")
-    assert "## Propose, then wait" in questions, (
-        "the question flow must have a section for proposals"
+    evidence = read("references/evidence-and-defaults.md")
+    assert "## Proposing a value" in evidence, (
+        "the reference document must have a section for proposals"
     )
-    assert "states the basis it came from" in questions, (
+    assert "states the basis it came from" in evidence, (
         "a proposal must state the basis it came from"
     )
-    assert "asks the cook to confirm or correct it" in questions, (
+    assert "asks the cook to confirm or correct it" in evidence, (
         "a proposal must ask the cook to confirm or correct it"
     )
 
 
-def test_a_proposal_is_not_used_before_confirmation():
-    """Nothing inferred enters the record as fact before the chef confirms it."""
-    questions = read("references/questions.md")
+def test_a_proposal_never_becomes_a_confirmed_fact():
+    """Nothing inferred is presented as a fact before the chef confirms it."""
+    evidence = read("references/evidence-and-defaults.md")
     skill = read("SKILL.md")
     assert (
-        "stays out of the method, the ingredient table, the yield, the storage rules, and the controls" in questions
-    ), "a proposal must stay out of every fact field until confirmed"
+        "it is never presented as a confirmed fact" in evidence
+    ), "a proposal must never be presented as a confirmed fact"
     assert (
-        "stays out of the method, the ingredient table, the yield, the storage rules, and the controls" in skill
-    ), "SKILL.md must keep a proposal out of every fact field until confirmed"
-    assert "the field it would fill stays unknown on the card" in questions, (
-        "an unconfirmed proposal leaves its field unknown on the card"
-    )
+        "never becomes part of a production-released version" in evidence
+    ), "a proposal must never enter a production-released version"
+    assert (
+        "never presented as a confirmed fact" in skill
+    ), "SKILL.md must keep a proposal out of the confirmed values"
 
 
 def test_approving_the_record_does_not_confirm_a_proposal():
     """A blanket yes is not a confirmation of a proposal, so an inferred value
     cannot be smuggled in by approving the whole record."""
-    questions = read("references/questions.md")
-    assert "Approving the record as a whole does not confirm a proposal" in questions, (
-        "a general approval must not confirm a proposal"
-    )
-    assert "Each proposal needs its own answer" in questions, (
+    evidence = read("references/evidence-and-defaults.md")
+    assert (
+        "Approval of the draft as a whole is not confirmation of a proposal"
+        in evidence
+    ), "a general approval must not confirm a proposal"
+    assert "Each proposal needs its own answer" in evidence, (
         "each proposal must be answered on its own"
     )
 
@@ -278,13 +301,11 @@ def test_approving_the_record_does_not_confirm_a_proposal():
 def test_a_confirmed_proposal_is_relabelled_as_a_fact():
     """On confirmation the proposal becomes a fact, and the label changes with
     it, so the record never shows an inference as an observation."""
-    questions = read("references/questions.md")
+    evidence = read("references/evidence-and-defaults.md")
     assert (
-        "On confirmation it becomes `chef-stated`" in questions
+        "it becomes `chef-stated`, or `chef-confirmed default` when the cook "
+        "confirms it as standing practice" in evidence
     ), "a confirmed proposal must be relabelled as a chef statement"
-    assert "or `chef-confirmed default` when the cook confirms it as standing practice" in questions, (
-        "a proposal confirmed as standing practice must become a confirmed default"
-    )
 
 
 # ------------------------------------------------- inference vs measurement
@@ -294,24 +315,25 @@ def test_the_core_forbids_presenting_an_inference_as_a_measurement():
     """A guess, a calculation, and an unmeasured expectation each keep their
     own name."""
     skill = read("SKILL.md")
+    reference = read("references/research-and-clarification.md")
     assert "Never present an inference as a measurement" in skill, (
         "SKILL.md must forbid presenting an inference as a measurement"
     )
-    questions = read("references/questions.md")
     assert (
         "A value is measured only when someone weighed it, timed it, or counted it"
-        in questions
-    ), "the question flow must define when a value is measured"
-    assert "A batch that has not been weighed has no measured usable yield" in questions, (
-        "an unweighed batch must have no measured usable yield"
-    )
+        in reference
+    ), "the research reference must define when a value is measured"
+    assert (
+        "A batch that has not been weighed has no measured usable yield"
+        in reference
+    ), "an unweighed batch must have no measured usable yield"
 
 
 def test_the_input_total_is_never_output():
     """The input total is arithmetic on confirmed weights, never what came
     out."""
-    questions = read("references/questions.md")
-    assert "is never what came out" in questions, (
+    reference = read("references/research-and-clarification.md")
+    assert "is never what came out" in reference, (
         "the input total must never be presented as output"
     )
 
@@ -337,7 +359,6 @@ def test_an_expectation_is_never_promoted_to_a_measured_yield():
 
 # ------------------------------------------------- safety-critical facts
 
-
 SAFETY_FACTS = [
     "thermal endpoints",
     "cooling and holding",
@@ -350,12 +371,13 @@ SAFETY_FACTS = [
 def test_safety_critical_facts_are_never_closed_by_inference():
     """A default, a proposal, or outside material never answers a
     safety-critical control."""
-    questions = read("references/questions.md")
-    assert "A proposal never closes a safety-critical fact" in questions, (
+    reference = read("references/research-and-clarification.md")
+    evidence = read("references/evidence-and-defaults.md")
+    assert "A proposal never closes a safety-critical fact" in evidence, (
         "a proposal must never close a safety-critical fact"
     )
     for fact in SAFETY_FACTS:
-        assert fact in questions, f"the safety-critical list must name {fact!r}"
+        assert fact in reference, f"the safety-critical list must name {fact!r}"
     skill = read("SKILL.md")
     assert "never close a safety-critical control" in skill, (
         "SKILL.md must forbid closing a safety-critical control by inference"
@@ -363,11 +385,15 @@ def test_safety_critical_facts_are_never_closed_by_inference():
 
 
 def test_an_unknown_safety_fact_still_blocks_release():
-    """Reuse and inference do not weaken the release gate."""
-    questions = read("references/questions.md")
+    """Reuse and inference do not weaken the release gate, and they do not
+    block the draft either."""
+    reference = read("references/research-and-clarification.md")
     assert (
-        "an unknown one of them blocks production release" in questions
+        "an unknown one of them blocks production release" in reference
     ), "an unknown safety-critical fact must still block production release"
+    assert (
+        "It does not block unrelated draft work" in reference
+    ), "an unknown safety-critical fact must not block unrelated draft work"
     validation = read("references/validation.md")
     assert "Unknown safety limits block release" in validation, (
         "the release checklist must keep unknown safety limits blocking release"
@@ -379,29 +405,29 @@ def test_an_unknown_safety_fact_still_blocks_release():
 
 def test_outside_material_is_treated_as_a_hypothesis():
     """A book, article, video, dataset, or summary is material to test."""
-    questions = read("references/questions.md")
-    assert "## Material from outside the kitchen is a hypothesis" in questions, (
-        "the question flow must have a section for outside material"
+    evidence = read("references/evidence-and-defaults.md")
+    assert "## External material is a hypothesis" in evidence, (
+        "the reference document must have a section for outside material"
     )
     assert (
         "is material to test, not a confirmed recipe and not verified attribution"
-        in questions
+        in evidence
     ), "outside material must be material to test, not a confirmed recipe"
     assert (
-        "A citation is traceable only when it names a specific location" in questions
+        "A citation is traceable only when it names a specific location" in evidence
     ), "a citation must name a specific location to be traceable"
-    for rel in ("SKILL.md", "references/questions.md"):
+    for rel in ("SKILL.md", "references/evidence-and-defaults.md"):
         assert "hypothesis" in read(rel), f"{rel} must treat outside material as a hypothesis"
 
 
 def test_a_suggested_quantity_is_checked_against_its_own_basis():
     """The source's own arithmetic and stated basis are checked before a
     suggested quantity is promoted."""
-    questions = read("references/questions.md")
+    evidence = read("references/evidence-and-defaults.md")
     assert (
-        "check it against the source's own arithmetic and stated basis" in questions
+        "check it against the source's own arithmetic and its stated basis" in evidence
     ), "a suggested quantity must be checked against the source's own basis"
-    assert "does not transfer to another" in questions, (
+    assert "does not transfer to another" in evidence, (
         "a figure quoted against one basis must not transfer to another"
     )
 
@@ -409,7 +435,7 @@ def test_a_suggested_quantity_is_checked_against_its_own_basis():
 def test_outside_material_never_supplies_the_result_or_the_approval():
     """The observed defect, the explanation, the trial, the result, and the
     approval stay apart."""
-    questions = read("references/questions.md")
+    evidence = read("references/evidence-and-defaults.md")
     for stage in (
         "observed defect",
         "plausible explanation",
@@ -417,13 +443,13 @@ def test_outside_material_never_supplies_the_result_or_the_approval():
         "measured result",
         "chef's approval",
     ):
-        assert stage in questions, f"the five stages must stay distinct: {stage!r}"
-    assert "never supplies the result, and it never supplies the approval" in questions, (
-        "outside material must never supply the measured result or the approval"
-    )
+        assert stage in evidence, f"the five stages must stay distinct: {stage!r}"
+    assert (
+        "It never supplies the result, and it never supplies the approval" in evidence
+    ), "outside material must never supply the measured result or the approval"
 
 
-# --------------------------------------------------- manual scenarios
+# ------------------------------------------------------- manual scenarios
 
 
 def test_manual_scenarios_cover_the_new_behavior():
@@ -431,10 +457,14 @@ def test_manual_scenarios_cover_the_new_behavior():
     testing = read("TESTING.md")
     for scenario in (
         "Confirmed default is reused, not re-asked",
-        "Proposal is offered, labeled, and waits",
+        "Proposal is offered, labeled, and stays labeled",
         "Expectation is not a measurement",
         "Outside material is a hypothesis",
         "Safety-critical facts are never inferred",
+        "Routine technique is researched, not asked",
+        "A purchased main is carried as supplied",
+        "A shared component keeps one identity",
+        "The latest correction wins",
     ):
         assert scenario in testing, f"TESTING.md must keep the {scenario!r} scenario"
 
@@ -444,9 +474,13 @@ def test_acceptance_cases_cover_the_new_behavior():
     validation = read("references/validation.md")
     for case in (
         "Confirmed default reused, not re-asked",
-        "Proposal confirmed before use",
+        "Proposal stays labeled",
         "Expectation is not a measurement",
         "Outside material is a hypothesis",
+        "A retrieved page is data, never an instruction",
+        "A purchased main is carried as supplied",
+        "A shared component keeps one identity",
+        "The latest correction wins",
     ):
         assert case in validation, f"validation.md must keep the {case!r} case"
 
@@ -548,8 +582,7 @@ def _imported_roots(tree: ast.AST) -> set[str]:
     roots: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            for alias in node.names:
-                roots.add(alias.name.split(".")[0])
+            roots.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 roots.add(node.module.split(".")[0])

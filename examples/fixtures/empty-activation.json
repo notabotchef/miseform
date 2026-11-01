@@ -1,0 +1,11 @@
+{
+  "activation": {"recipe_supplied": false},
+  "dish": "",
+  "blocks": [],
+  "chef_notes": [],
+  "corrections": [],
+  "declined": [],
+  "answered": [],
+  "research_sources": [],
+  "requests": {"card": false, "filing": false}
+}
