@@ -72,8 +72,19 @@ ACTIVATION = {
 PRIVATE_NAMES = {"recipe-library.local.json", ".env"}
 PRIVATE_SUFFIXES = (".local.json", ".local.yaml")
 PRIVATE_DIRS = {"config"}
-# Build output that must not travel with the skill.
-SKIP_NAMES = {"__pycache__", ".pytest_cache", ".git", ".venv", ".DS_Store"}
+# Build output that must not travel with the skill. Tool caches count: a
+# developer who runs a type checker or a linter in the package folder gets
+# cache directories, and those must never be copied into a host's skill
+# folder.
+SKIP_NAMES = {
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".git",
+    ".venv",
+    ".DS_Store",
+}
 SKIP_SUFFIXES = (".pyc",)
 
 

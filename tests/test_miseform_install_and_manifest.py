@@ -93,17 +93,16 @@ def _stdlib_names() -> set[str]:
 
 STDLIB = _stdlib_names()
 
-# The modules that live beside the scripts, and are therefore not
-# third-party dependencies.
-LOCAL_MODULES = {
-    "build_card",
-    "capability_check",
-    "card_model",
-    "exporter",
-    "install",
-    "render_html",
-    "render_markdown",
-}
+def _local_module_names(directory: Path) -> set[str]:
+    """Return the module names that live in ``directory``.
+
+    A module that sits beside the scripts is part of this package, not a
+    third-party dependency. The set is read from the directory instead of
+    being written out by hand, so a new sibling module added later is
+    recognized without editing this test — the drift guard then fires on a
+    genuine third-party import only.
+    """
+    return {path.stem for path in directory.glob("*.py")}
 
 
 def _imported_roots(path: Path) -> set[str]:
@@ -124,10 +123,12 @@ def _imported_roots(path: Path) -> set[str]:
 
 def _script_imports() -> set[str]:
     """Return every third-party module the scripts import."""
+    scripts = ROOT / "scripts"
+    local = _local_module_names(scripts)
     found: set[str] = set()
-    for script in sorted((ROOT / "scripts").glob("*.py")):
+    for script in sorted(scripts.glob("*.py")):
         for name in _imported_roots(script):
-            if name in STDLIB or name in LOCAL_MODULES:
+            if name in STDLIB or name in local:
                 continue
             if name == "__future__":
                 continue
@@ -257,16 +258,41 @@ def test_the_drift_guard_actually_catches_an_undeclared_import(tmp_path: Path):
     )
     (scripts / "card_model.py").write_text("import re\n", encoding="utf-8")
 
+    local = _local_module_names(scripts)
     found: set[str] = set()
     for script in sorted(scripts.glob("*.py")):
         for name in _imported_roots(script):
-            if name in STDLIB or name in LOCAL_MODULES or name == "__future__":
+            if name in STDLIB or name in local or name == "__future__":
                 continue
             found.add(name)
 
     assert found == {"numpy"}, found
     declared = {_requirement_name(spec) for spec in _manifest_lines()[0]}
     assert found - declared == {"numpy"}, "the drift guard did not fire"
+
+
+def test_the_drift_guard_does_not_report_a_new_sibling_module(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """A module added beside the scripts is local, not a dependency.
+
+    The guard used to carry a hand-written list of the local modules, so a
+    module added later was reported as an undeclared third-party import and
+    the suite failed for a change that needed no dependency at all. The
+    local set is read from the directory instead, so this stays green.
+    """
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "intake_policy.py").write_text("import json\n", encoding="utf-8")
+    (scripts / "build_card.py").write_text(
+        "import intake_policy\nimport numpy\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    found = _script_imports()
+
+    assert "intake_policy" not in found, found
+    assert "numpy" in found, found
 
 
 # --------------------------------------------------- the capability diagnostic
@@ -451,6 +477,46 @@ def test_the_installer_never_deletes_anything(tmp_path: Path):
     installer.copy_skill(destination)
     assert stranger.exists()
     assert stranger.read_text(encoding="utf-8") == "keep"
+
+
+def test_the_installer_never_copies_a_tool_cache_into_a_host_folder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """A developer's local tool caches stay in the developer's folder.
+
+    A type checker or a linter run in the package folder leaves cache
+    directories behind. They are local artifacts, not skill content, and
+    they must not be copied into a host's skill folder.
+    """
+    # A stand-in package root, so the test never writes into the real one.
+    package = tmp_path / "package"
+    (package / "scripts").mkdir(parents=True)
+    (package / "SKILL.md").write_text("# miseform\n", encoding="utf-8")
+    (package / "requirements.txt").write_text("jsonschema>=4.18,<5\n", encoding="utf-8")
+    for name in (".mypy_cache", ".ruff_cache"):
+        cache = package / name
+        cache.mkdir()
+        (cache / "cache.0.db").write_text("local artifact", encoding="utf-8")
+    pycache = package / "scripts" / "__pycache__"
+    pycache.mkdir()
+    (pycache / "stale.pyc").write_text("local artifact", encoding="utf-8")
+
+    monkeypatch.setattr(installer, "PACKAGE", package)
+
+    destination = tmp_path / "skills" / "miseform"
+    destination.mkdir(parents=True)
+    installer.copy_skill(destination)
+
+    copied = [
+        p.relative_to(destination) for p in destination.rglob("*") if p.is_file()
+    ]
+    names = {p.as_posix() for p in copied}
+
+    assert "SKILL.md" in names, sorted(names)
+    assert "requirements.txt" in names, sorted(names)
+    for name in (".mypy_cache", ".ruff_cache", "__pycache__"):
+        offenders = [str(p) for p in copied if name in p.parts]
+        assert not offenders, offenders
 
 
 def test_the_installer_reports_a_missing_prerequisite_by_name():
