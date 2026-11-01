@@ -647,16 +647,25 @@ def test_every_export_carries_the_same_numbers(tmp_path, sources):
 def test_the_highest_ranked_source_wins(sources):
     """The first source that matches is the one that is published.
 
-    A later, lower-ranked source never replaces the one that matched, and it
-    never rides along in the record as a second acceptance.
+    A later, lower-ranked source never replaces the one that matched, and a
+    source the engine cannot use is rejected with its reason on the record
+    instead of riding along as a second acceptance.
     """
     result = research_volume("salt", 10, state="table salt", sources=sources)
     assert result.status == "derived"
     assert result.provenance["source_title"] == (
         "Example Salt Composition Record (synthetic)"
     )
-    assert len(result.attempts) == 1
     assert result.attempts[0]["outcome"] == "accepted"
+    assert result.attempts[0]["source_title"] == (
+        "Example Salt Composition Record (synthetic)"
+    )
+    # The kosher-salt chart states a different product, so it is rejected
+    # with its reason and never published beside the table-salt record.
+    assert len(result.attempts) == 2
+    assert result.attempts[1]["outcome"] == "rejected"
+    assert "table salt" in result.attempts[1]["reason"].lower()
+    assert "kosher" in result.attempts[1]["reason"].lower()
 
 
 def test_a_fine_salt_is_not_answered_with_a_kosher_chart(sources):
@@ -730,3 +739,113 @@ def test_the_engine_reproduces_the_shipped_examples_published_measures(sources):
     card = Card(researched)
     assert card.schema_errors() == []
     assert [f for f in card.findings() if f.severity == "blocker"] == []
+
+
+# ------------------------------------------- conflicting same-state sources
+
+def _flour_source(title: str, ratio: str, amount: float, grams: float, convention: str = "US") -> volume_research.VolumeSource:
+    return volume_research.VolumeSource(
+        ingredient="flour",
+        aliases=("raw flour",),
+        state="raw",
+        brand=None,
+        tier="chart",
+        url=f"https://example.invalid/miseform/{title.lower().replace(' ', '-')}",
+        title=title,
+        accessed="2026-11-01",
+        original_ratio=ratio,
+        amount=amount,
+        unit="cup",
+        unit_convention=convention,
+        grams=grams,
+        state_match="ingredient and state match",
+        proxy=False,
+        confidence="high",
+        measure="total_mass",
+    )
+
+
+def test_two_raw_flour_sources_that_disagree_on_density_stay_unresolved():
+    """Same ingredient, same state, two cups that disagree threefold.
+
+    A half cup of raw flour at 100 g and a cup at 300 g imply different
+    densities. Neither figure is published: the ingredient is unresolved
+    with both ratios on the record, and the cook settles which source
+    applies.
+    """
+    light = _flour_source(
+        "Example Light Flour Cup Chart (synthetic)",
+        "1/2 US cup = 100 g",
+        0.5,
+        100,
+    )
+    heavy = _flour_source(
+        "Example Heavy Flour Cup Chart (synthetic)",
+        "1 US cup = 300 g",
+        1,
+        300,
+    )
+    result = research_volume("flour", 200, state="raw", sources=[light, heavy])
+    assert result.status == "unresolved", result.volume
+    assert "disagree materially" in result.unresolved_reason
+    assert "1/2 US cup = 100 g" in result.unresolved_reason
+    assert "1 US cup = 300 g" in result.unresolved_reason
+    titles = [a["source_title"] for a in result.attempts]
+    assert "Example Light Flour Cup Chart (synthetic)" in titles
+    assert "Example Heavy Flour Cup Chart (synthetic)" in titles
+
+
+def test_a_rival_without_a_unit_convention_is_rejected_before_its_density_is_used():
+    """A same-state rival with no convention is rejected, never read for density.
+
+    A valid raw-flour source sits beside a same-state rival whose unit
+    convention is missing. Reading the rival's grams_per_ml would raise a
+    KeyError, so the engine validates and rejects every rival first and
+    derives from the valid source.
+    """
+    good = _flour_source(
+        "Example Sound Flour Cup Chart (synthetic)",
+        "1/2 US cup = 100 g",
+        0.5,
+        100,
+    )
+    bad = _flour_source(
+        "Example Broken Flour Cup Chart (synthetic)",
+        "1 US cup = 120 g",
+        1,
+        120,
+        convention="",
+    )
+    result = research_volume("flour", 200, state="raw", sources=[good, bad])
+    assert result.status == "derived", result.unresolved_reason
+    assert result.provenance["source_title"] == "Example Sound Flour Cup Chart (synthetic)"
+    rejected = [a for a in result.attempts if a["outcome"] == "rejected"]
+    assert rejected
+    assert "unit convention" in rejected[0]["reason"].lower()
+
+
+def test_a_formula_row_with_no_stated_weight_is_researched_from_its_formula_mass(sources):
+    """Null weight_g plus a percent formula resolves the formula mass first.
+
+    Row I2 has no weight_g of its own and states 10 percent of row I1
+    (100 g), so Card.resolved_weights() returns 10 g. Research must use that
+    resolved mass and derive a measure instead of reporting an
+    unresolved-no-mass result with zero attempts.
+    """
+    data = base_card()
+    rows = data["components"][0]["ingredients"]
+    rows.append(
+        {
+            "row_id": "I2",
+            "name": "Sesame seeds",
+            "formula": {"kind": "percent", "basis_row_id": "I1", "value": 10},
+            "notes": "10 percent of the cabbage.",
+        }
+    )
+    data["input_total_g"] = 110
+    assert Card(data).resolved_weights()["I2"] == pytest.approx(10.0)
+    researched, records = apply_research(data, sources=sources)
+    row_b = next(r for r in researched["components"][0]["ingredients"] if r["row_id"] == "I2")
+    assert row_b["volume_source"]["status"] == "derived"
+    assert row_b["volume"].startswith("≈ ")
+    assert any(a["outcome"] == "accepted" for a in row_b["volume_source"]["attempts"])

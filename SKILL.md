@@ -23,7 +23,7 @@ Each stage is defined once, in [the canonical path](references/research-and-clar
 
 The recipe can arrive as text pasted with the activation, as an image attached to it, or — the fallback that works on every host — as the cook's next message.
 
-This release is prose-only for the behaviour it describes: the renderer, schema and scripts do not enforce the conversational rules. The static checks in `tests/` verify the contract and the toolchain; the live conversational runs recorded for this release are listed in [TESTING.md](TESTING.md#live-runs-recorded-for-this-release).
+This release is prose-only for the behaviour it describes: the renderer, schema and scripts do not enforce the conversational rules. The static checks in `tests/` verify the contract and the toolchain; the live conversational runs recorded for this release are listed in [TESTING.md](TESTING.md#live-runs-recorded-for-this-release), and the per-host record — which hosts were exercised, which were not, and what failed — is in [host results](references/host-results.md).
 
 ## Paths and capabilities
 
