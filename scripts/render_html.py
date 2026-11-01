@@ -23,6 +23,7 @@ from card_model import (
     format_percent,
     format_weight,
     join_blockers,
+    row_weight_label,
 )
 
 TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "recipe-card.html"
@@ -81,9 +82,18 @@ def _facts_block(card: Card) -> str:
 
 def _ingredients_table(card: Card) -> str:
     derived = card.derived()
+    resolved = card.resolved_weights()
     rows: list[str] = []
     for comp in card.components:
         comp_name = str(comp.get("name", ""))
+        if isinstance(comp.get("linked"), dict):
+            link = comp.get("linked") or {}
+            rows.append(
+                '<tr class="group"><th colspan="4" scope="colgroup">'
+                f'{esc(comp_name)} — linked {esc(link.get("component_id"))} '
+                f'{esc(link.get("version"))}</th></tr>'
+            )
+            continue
         rows.append(
             f'<tr class="group"><th colspan="4" scope="colgroup">{esc(comp_name)}</th></tr>'
         )
@@ -96,10 +106,11 @@ def _ingredients_table(card: Card) -> str:
             name = f"{esc(row_id)} · {esc(ing.get('name'))}"
             if notes:
                 name = f"{name}<br><span class=\"caption\">{esc(notes)}</span>"
+            weight_text = row_weight_label(ing, resolved.get(row_id))
             rows.append(
                 "<tr>"
                 f"<td>{name}</td>"
-                f'<td class="num">{esc(format_weight(ing.get("weight_g")))}</td>'
+                f'<td class="num">{esc(weight_text)}</td>'
                 f'<td class="num">{volume_text}</td>'
                 f'<td class="num">{esc(format_percent(derived.percentages.get(row_id)))}</td>'
                 "</tr>"

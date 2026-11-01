@@ -39,17 +39,43 @@ The ingredient schema is deliberately narrow. `references/card.schema.json` stor
 | Promised field | Where it lives |
 |---|---|
 | Stable row ID | stored: `row_id` |
+| component | structural: the row's position under `components[]` |
 | name | stored: `name` |
-| net weight/unit | stored: `weight_g`, in grams; grams are the authority |
+| net weight/unit | stored: `weight_g`, in grams; grams are the authority; null when the mass is unknown |
 | optional measured or source-supported volume/unit | stored: `volume` |
+| supplied quantity in the cook's own unit | stored: `quantity`, with the original unit, convention and source text kept beside the metric value |
+| mass stated as a formula | stored: `formula`, naming the basis row it resolves against |
+| volume source record | stored: `volume_source`, carrying the URL, title, access date, the source's own ratio, the unit convention, the state match, proxy status, confidence and the reason when unresolved |
 | brand/specification | rides in `notes` |
 | prep state | rides in `notes` |
 | volume standard | rides in `notes`, together with the source title, URL, access date, ratio, units convention and proxy status |
 | reference scaling % | computed at render from the stored weights; never stored |
-| component | structural: the row's position under `components[]` |
 | notes and source | the `notes` property on the row; it is also the carrier for every promised field the row has no property for |
 
-The `notes` string is the documented carrier for every promised field the stored row has no property for, so provenance survives without widening the schema. Do not add `prep_state`, `volume_standard`, `volume_source` or `scaling_percent` properties and do not widen `additionalProperties`: the narrow row plus the notes convention is the contract, and a contributor who wants one of these fields records it in `notes`.
+The `notes` string remains the documented carrier for every promised field the stored row has no property for, so provenance survives without a new property for each one. The row stays narrow in the way that matters: it stores no computed percentage and no stored scaling factor, and `additionalProperties` stays closed. The three properties it now carries in its own right — `quantity`, `formula` and `volume_source` — exist because a cook's quantity in their own unit, a mass written as a formula and a machine-readable source record are facts, not prose. A contributor who wants any other field records it in `notes`.
+
+## Quantity, mass and yield
+
+A row's mass is established in exactly one of three ways, and the card records which:
+
+- the cook stated it: `weight_g` holds the grams;
+- the card states it as a formula against another row: `formula` names the basis row and the percentage or multiple, and the mass is resolved from the card's own rows at validation time;
+- nobody established it: `weight_g` is null and the row stays unresolved. An unknown mass is never replaced by a guessed one, and a quantity the cook gave in their own unit stays that quantity in `quantity`, with the original text kept beside it.
+
+Four different masses are kept apart and never substituted for one another:
+
+| Mass | Where it lives | What it is |
+|---|---|---|
+| Gross purchase mass | `components[].gross_purchase_g` | what was bought, before trimming |
+| Edible mass | each row's `weight_g` | what enters the formula |
+| Input sum | `input_total_g` | the sum of the edible masses |
+| Measured finished yield | `usable_yield_g` | what came out, weighed |
+
+The input sum is arithmetic on the edible masses. It is never the gross purchase, and it is never the finished yield. A row whose mass is unresolved contributes nothing to the input sum, and a card that declares an `input_total_g` that does not match the sum of its established masses is reported.
+
+A percentage row scales from the base it was written against, so changing the base or the batch factor changes the percentage row with it. A row whose base mass is unknown stays unknown.
+
+A component that is used by more than one card is linked, not restated: `components[].linked` names the component and the exact version used, the card carries no copy of its formula, and its mass is counted once. A card that restates a linked component's formula, or links the same component twice, is reported.
 
 Percentages are computed from the stored weights — reference percentage = 100 × ingredient mass / named reference mass within the component — and are never stored on the card. The scale factor is computed as target reference mass divided by base reference mass and is offered only under a validated batch range; `batch_factor` on a card records the factor the cook asked for, not a computed percentage.
 
