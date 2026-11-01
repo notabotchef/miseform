@@ -644,6 +644,59 @@ def test_every_export_carries_the_same_numbers(tmp_path, sources):
     ), "the input total must reach the workbook"
 
 
+def test_the_highest_ranked_source_wins(sources):
+    """The first source that matches is the one that is published.
+
+    A later, lower-ranked source never replaces the one that matched, and it
+    never rides along in the record as a second acceptance.
+    """
+    result = research_volume("salt", 10, state="table salt", sources=sources)
+    assert result.status == "derived"
+    assert result.provenance["source_title"] == (
+        "Example Salt Composition Record (synthetic)"
+    )
+    assert len(result.attempts) == 1
+    assert result.attempts[0]["outcome"] == "accepted"
+
+
+def test_a_fine_salt_is_not_answered_with_a_kosher_chart(sources):
+    """A fine salt is table salt milled finer, not a kosher salt."""
+    result = research_volume("salt", 10, state="fine salt", sources=sources)
+    assert result.status == "derived"
+    assert result.provenance["source_title"] != (
+        "Example Kosher Salt Weight Chart (synthetic)"
+    )
+
+
+def test_a_resolved_card_never_shows_a_formula_error_in_the_workbook(tmp_path):
+    """A row with no mass holds text, and the sheet must not divide it."""
+    import openpyxl
+
+    data = base_card()
+    row = data["components"][0]["ingredients"][0]
+    row.pop("weight_g")
+    row["quantity"] = {"amount": 2, "unit": "quart", "kind": "volume", "convention": "US"}
+    row["notes"] = "Quantity not supplied in grams."
+    data["components"][0]["ingredients"].append(
+        {"row_id": "I2", "name": "Sesame seeds", "weight_g": 20, "notes": "Known."}
+    )
+    data["input_total_g"] = 20
+    card = Card(data)
+
+    out = tmp_path / "card.xlsx"
+    result = export_xlsx(card, out)
+    assert result.ok, result.detail
+
+    values = openpyxl.load_workbook(out, data_only=True)["Recipe Card"]
+    errors = [
+        (cell.coordinate, cell.value)
+        for row_cells in values.iter_rows()
+        for cell in row_cells
+        if isinstance(cell.value, str) and cell.value.startswith("#")
+    ]
+    assert errors == [], f"the sheet shows a formula error: {errors}"
+
+
 def test_the_shipped_example_card_still_passes_every_check():
     """The published example is unchanged by this work."""
     card = load_card(EXAMPLE)

@@ -85,6 +85,9 @@ STATE_CONFLICTS = (
     ("table salt", "kosher salt"),
     ("table salt", "sea salt"),
     ("kosher salt", "sea salt"),
+    # A fine salt is table salt milled finer. It is not a kosher salt, and a
+    # kosher chart cannot answer a fine-salt question.
+    ("fine salt", "kosher salt"),
 )
 
 # Words that describe the ingredient without changing what it is.
@@ -536,7 +539,10 @@ def research_volume(
             }
         )
         if reason is None:
+            # The first accepted source is the highest-ranked one that
+            # matched. A later source never replaces it.
             accepted = source
+            break
 
     if accepted is None:
         seen = len(attempts)

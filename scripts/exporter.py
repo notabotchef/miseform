@@ -647,9 +647,13 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
         if ref_cell:
             for ing_row in range(comp_first_row, row):
                 pct_cell = sheet.cell(row=ing_row, column=5)
+                # The numerator is guarded too: a row whose mass was never
+                # established holds text, and dividing text would leave a
+                # visible error in the sheet instead of an empty cell.
                 put_formula(
                     pct_cell,
-                    f'=IF(ISNUMBER({ref_cell}),C{ing_row}/{ref_cell},"")',
+                    f'=IF(AND(ISNUMBER({ref_cell}),ISNUMBER(C{ing_row})),'
+                    f'C{ing_row}/{ref_cell},"")',
                     (row_weights[ing_row] / ref_weight)
                     if ref_weight and ing_row in row_weights
                     else "",
