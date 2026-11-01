@@ -872,3 +872,63 @@ def test_an_unmeasurable_yield_blocks_release_without_being_asked():
     unknown = next(u for u in decision["unknowns"] if u["component"] == "Sesame crumb")
     assert unknown["value"] == ""
     assert unknown["label"] == "unknown"
+
+
+def test_the_questions_and_the_blockers_agree_about_what_is_answered():
+    """An answered fact is asked about neither.
+
+    The same resolution decides both lists, so the engine never asks the
+    cook a question it has already recorded the answer to, and never
+    releases a card while still asking about the fact it is asking about.
+    """
+    chicken = component(
+        "Chicken",
+        ingredients=[{"name": "raw chicken breast", "amount": "1 kg"}],
+        method_text=["Marinate and cook."],
+    )
+    answered_text = "Chicken: a stated thermal endpoint is not stated."
+    decision = decide(intake_of(chicken, answered=[answered_text]))
+
+    assert not any("thermal endpoint" in q["text"] for q in decision["questions"]), (
+        "a fact the cook already answered is never asked again"
+    )
+    assert not any("thermal endpoint" in b for b in decision["blockers"])
+    # The facts the cook did not answer are still asked and still block.
+    assert any(
+        "holding or cooling rule" in q["text"] for q in decision["questions"]
+    )
+    assert any("holding or cooling rule" in b for b in decision["blockers"])
+
+
+def test_one_answer_settles_one_safety_fact_not_the_whole_category():
+    """An answer to one safety fact does not settle the others.
+
+    The endpoint, the holding rule and the measured yield are three
+    different facts about one component. A key that names the category
+    cannot tell them apart, so it settles none of them and every one of
+    them keeps blocking release.
+    """
+    chicken = component(
+        "Chicken",
+        ingredients=[{"name": "raw chicken breast", "amount": "1 kg"}],
+        method_text=["Marinate and cook."],
+    )
+    decision = decide(
+        intake_of(chicken, answered=["Chicken::safety_critical_uncertainty"])
+    )
+
+    assert any("thermal endpoint" in b for b in decision["blockers"]), (
+        "a category-level key names no single fact, so it settles none of them"
+    )
+    assert any("holding or cooling rule" in b for b in decision["blockers"])
+    assert any("measured usable yield" in b for b in decision["blockers"])
+
+    # The field-level key settles exactly the fact it names.
+    field_scoped = decide(
+        intake_of(chicken, answered=["Chicken::thermal endpoint"])
+    )
+    assert not any("thermal endpoint" in b for b in field_scoped["blockers"])
+    assert any("holding or cooling rule" in b for b in field_scoped["blockers"]), (
+        "answering the endpoint does not settle the holding rule"
+    )
+    assert any("measured usable yield" in b for b in field_scoped["blockers"])

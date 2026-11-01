@@ -930,9 +930,15 @@ def _never_questions(candidates: list[dict[str, Any]], intake: dict[str, Any]) -
             "safety_critical_uncertainty",
         ):
             never.append(text)
-        elif text in declined or text in answered:
+        elif text in declined:
             never.append(text)
         elif _declined_key(declined, candidate):
+            never.append(text)
+        elif _is_answered(candidate, answered):
+            # A fact the cook already answered is settled, so it is not
+            # asked again. The same resolution the blocker path uses, so
+            # the question list and the blocker list cannot disagree
+            # about what is settled.
             never.append(text)
         elif candidate["category"] == "identity_or_quantity_conflict" and _unmeasured(text):
             never.append(text)
@@ -1014,12 +1020,23 @@ def _is_answered(candidate: dict[str, Any], answered: set[str]) -> bool:
     """True when the cook has already answered this question.
 
     The answer is recorded either as the question's own text or as a stable
-    ``component::category`` key, so a settled question is recognised however
-    it was recorded.
+    key, so a settled question is recognised however it was recorded.
+
+    A safety-critical fact is settled by an answer that names it. The
+    candidate carries the field it is about -- the thermal endpoint, the
+    holding rule, the measured usable yield -- and the stable key for it
+    is ``component::field``. A category-level key cannot tell those
+    facts apart, so it never settles a safety-critical fact on its own:
+    one answer settles one fact, and a fact the cook never confirmed
+    keeps blocking release.
     """
     if str(candidate.get("text", "")) in answered:
         return True
-    key = f"{candidate.get('component', '')}::{candidate.get('category', '')}"
+    component = str(candidate.get("component", ""))
+    field = str(candidate.get("field", ""))
+    if field:
+        return f"{component}::{field}" in answered
+    key = f"{component}::{candidate.get('category', '')}"
     return key in answered
 
 
