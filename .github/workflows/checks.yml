@@ -29,9 +29,17 @@ jobs:
       # -rs prints a line per skipped test, so the guard below can tell a
       # genuinely green suite from one that skipped the release-critical
       # native Calc regressions because its tooling went missing.
+      #
+      # shell: bash is load-bearing, not decoration. GitHub's default shell for
+      # a run step is "bash -e {0}", which has no pipefail, so "pytest | tee"
+      # returns tee's exit status and a FAILING suite would be recorded as a
+      # passing step. "shell: bash" runs bash with -eo pipefail, so the
+      # pipeline fails when pytest fails.
       - name: Run the suite
+        shell: bash
         run: python -m pytest tests/ -q -rs | tee pytest-report.txt
       - name: Assert the native Calc regressions actually ran
+        shell: bash
         run: |
           if grep -qiE '^SKIPPED.*native calc' pytest-report.txt; then
             echo "::error::native Calc regressions were skipped, not run"
