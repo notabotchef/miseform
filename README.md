@@ -4,11 +4,11 @@
 
 **Your dish. A recipe any cook can repeat.**
 
-[![Stars](https://img.shields.io/github/stars/Nunezchef/miseform?style=flat-square)](https://github.com/Nunezchef/miseform/stargazers)
+[![Stars](https://img.shields.io/github/stars/notabotchef/miseform?style=flat-square)](https://github.com/notabotchef/miseform/stargazers)
 [![License](https://img.shields.io/badge/license-MIT-black?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?style=flat-square)](https://www.python.org)
-[![Checks](https://img.shields.io/github/actions/workflow/status/Nunezchef/miseform/checks.yml?style=flat-square)](https://github.com/Nunezchef/miseform/actions/workflows/checks.yml)
-[![Tests](https://img.shields.io/badge/tests-639%20passed-brightgreen?style=flat-square)](https://github.com/Nunezchef/miseform/actions/workflows/checks.yml)
+[![Checks](https://img.shields.io/github/actions/workflow/status/notabotchef/miseform/checks.yml?style=flat-square)](https://github.com/notabotchef/miseform/actions/workflows/checks.yml)
+[![Tests](https://img.shields.io/badge/tests-639%20passed-brightgreen?style=flat-square)](https://github.com/notabotchef/miseform/actions/workflows/checks.yml)
 
 A photo of your recipe. A card another cook can actually execute.
 
