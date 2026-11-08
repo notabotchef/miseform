@@ -74,6 +74,34 @@ def stem_for(card: Path) -> str:
     return data["filename_stem"] if "filename_stem" in data else card.stem
 
 
+def canonical_json_record(outdir: Path) -> Path:
+    """Return the canonical JSON edition a build wrote into ``outdir``.
+
+    A build output directory holds several ``*.json`` files: the canonical
+    card record, the build manifest, and (with a workflow ledger) a workflow
+    receipt. Directory listing order varies by filesystem, so the record is
+    selected by the artifact name the manifest declares, never by listing
+    position. The manifest carries no top-level language or theme, so a
+    positional pick can mistake it for the record.
+    """
+    manifests = sorted(outdir.glob("*.manifest.json"))
+    if len(manifests) != 1:
+        raise ValueError(
+            f"expected exactly one build manifest in {outdir}, found {len(manifests)}"
+        )
+    manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise ValueError("build manifest declares no artifacts mapping")
+    declared = artifacts.get("json")
+    if not isinstance(declared, dict) or not declared.get("name"):
+        raise ValueError("build manifest declares no JSON artifact")
+    path = outdir / declared["name"]
+    if not path.is_file():
+        raise ValueError(f"declared JSON artifact is missing: {declared['name']}")
+    return path
+
+
 def normalize_formula(formula: str) -> str:
     """Compare formula structure: erase user-facing message string branches.
 
@@ -598,16 +626,12 @@ def main(argv: list[str] | None = None) -> int:
         if code != 0:
             failures.append("CLI spot check: build_card exited non-zero")
         else:
-            written_paths = [p for p in Path(tmp).glob("*.json")
-                             if not p.name.endswith(".manifest.json")]
-            if not written_paths:
-                failures.append("CLI spot check: no JSON edition was written")
+            try:
+                written_path = canonical_json_record(Path(tmp))
+            except (OSError, ValueError) as exc:
+                failures.append(f"CLI spot check: no JSON edition was written ({exc})")
             else:
-                # The export directory holds the canonical card record and the build
-                # manifest, both "*.json". Taking the first path the filesystem
-                # returns would read the manifest - which carries no language or
-                # theme - whenever it sorts first. Name the manifest explicitly.
-                written = json.loads(written_paths[0].read_text(encoding="utf-8"))
+                written = json.loads(written_path.read_text(encoding="utf-8"))
                 if written.get("language") != "fr" or written.get("theme") != "atelier":
                     failures.append(
                         f"CLI spot check: language/theme not persisted: "
