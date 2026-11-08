@@ -167,6 +167,121 @@ def _schema_outcome() -> dict:
     }
 
 
+def _elf_needed_libraries(path: str) -> list[str] | None:
+    """The shared libraries an ELF binary needs, or None if it cannot say.
+
+    None means the file is not an ELF binary this probe can read - a macOS
+    Mach-O executable, for instance - so it carries no answer either way.
+    """
+    try:
+        data = Path(path).read_bytes()
+    except OSError:
+        return None
+    if len(data) < 64 or data[:4] != b"\x7fELF":
+        return None
+    if data[4] != 2:  # ELFCLASS64 only
+        return None
+    try:
+        e_shoff = int.from_bytes(data[0x28:0x30], "little")
+        e_shentsize = int.from_bytes(data[0x3A:0x3C], "little")
+        e_shnum = int.from_bytes(data[0x3C:0x3E], "little")
+        if not e_shoff or not e_shnum or e_shentsize < 64:
+            return None
+
+        def section(index: int) -> dict:
+            base = e_shoff + index * e_shentsize
+            return {
+                "type": int.from_bytes(data[base + 0x04:base + 0x08], "little"),
+                "offset": int.from_bytes(data[base + 0x18:base + 0x20], "little"),
+                "size": int.from_bytes(data[base + 0x20:base + 0x28], "little"),
+                "link": int.from_bytes(data[base + 0x28:base + 0x2C], "little"),
+                "entsize": int.from_bytes(data[base + 0x38:base + 0x40], "little"),
+            }
+
+        dynamic = None
+        for index in range(e_shnum):
+            sec = section(index)
+            if sec["type"] == 6:  # SHT_DYNAMIC
+                dynamic = sec
+                break
+        if dynamic is None:
+            return None
+        dynstr = section(dynamic["link"])
+        strings = data[dynstr["offset"]:dynstr["offset"] + dynstr["size"]]
+
+        needed: list[str] = []
+        entry_size = dynamic["entsize"] or 16
+        for i in range(dynamic["size"] // entry_size):
+            base = dynamic["offset"] + i * entry_size
+            tag = int.from_bytes(data[base:base + 8], "little")
+            if tag == 0:  # DT_NULL
+                break
+            if tag != 1:  # DT_NEEDED
+                continue
+            offset = int.from_bytes(data[base + 8:base + 16], "little")
+            end = strings.find(b"\x00", offset)
+            if end == -1:
+                continue
+            name = strings[offset:end].decode("utf-8", "replace")
+            if name:
+                needed.append(name)
+    except (IndexError, ValueError, OSError):
+        return None
+    return needed or None
+
+
+def _elf_missing_shared_libraries(path: str) -> list[str]:
+    """Shared libraries an ELF binary needs that this host cannot supply.
+
+    A browser that is present but whose system libraries were never installed
+    cannot start. On a fresh Debian/Ubuntu host the Playwright-managed Chromium
+    fails with "libglib-2.0.so.0: cannot open shared object file", because
+    "playwright install chromium" downloads the binary without the operating
+    system libraries it links against.
+
+    This reads the binary's own dynamic section, so it stays a pure reader: it
+    never launches the browser, never shells out and never writes.
+    """
+    needed = _elf_needed_libraries(path)
+    if not needed:
+        return []
+
+    search_dirs = [
+        str(Path(path).parent),  # libraries shipped beside the binary
+        "/lib",
+        "/lib64",
+        "/usr/lib",
+        "/usr/lib64",
+        "/usr/lib/x86_64-linux-gnu",
+        "/usr/lib/aarch64-linux-gnu",
+        "/usr/local/lib",
+        "/lib/x86_64-linux-gnu",
+        "/lib/aarch64-linux-gnu",
+    ]
+    return [
+        name
+        for name in needed
+        if not any((Path(d) / name).exists() for d in search_dirs)
+    ]
+
+
+def _browser_launch_probe(browser: str) -> bool | None:
+    """Can this browser binary actually start? True, False, or None if unknown.
+
+    True means the binary's dynamic linker will find every library it needs.
+    False means at least one is missing, which is what a fresh Debian or
+    Ubuntu host looks like before the system libraries are installed.
+    None means the binary carries no answer this probe can read - a Mach-O
+    binary on macOS, or a file it cannot parse. None is not evidence of a
+    broken browser, so it must never be reported as one.
+    """
+    needed = _elf_needed_libraries(browser)
+    if needed is None:
+        return None
+    missing = _elf_missing_shared_libraries(browser)
+    return not missing
+
+
 def _pdf_outcome() -> dict:
     """Can a card be rendered to a PDF?"""
     if not _module_present("playwright"):
@@ -196,6 +311,27 @@ def _pdf_outcome() -> dict:
                 "'brew install --cask google-chrome'; Debian/Ubuntu: 'sudo apt "
                 "install chromium'; or run 'python3 -m playwright install "
                 "chromium' and put the resulting binary on PATH)"
+            ),
+        }
+
+    # A browser that is present but cannot start is not a usable browser. On a
+    # fresh Debian/Ubuntu host the downloaded Chromium exists yet fails with
+    # "libglib-2.0.so.0: cannot open shared object file", because the operating
+    # system libraries it links against were never installed. Reporting that as
+    # AVAILABLE tells the cook the PDF edition works when it does not.
+    launch = _browser_launch_probe(browser)
+    if launch is False:
+        return {
+            "outcome": "pending",
+            "reason": (
+                f"a browser executable was found at {browser} but it cannot be "
+                "launched on this host, so no PDF can be rendered"
+            ),
+            "remedy": (
+                "install the browser's system libraries and re-run this check: "
+                "on Debian or Ubuntu 'python3 -m playwright install --with-deps "
+                "chromium' (or 'sudo apt install chromium'); on macOS "
+                "'brew install --cask google-chrome'"
             ),
         }
 

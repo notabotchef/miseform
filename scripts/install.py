@@ -319,25 +319,119 @@ def install_requirements(python: Path, required: list[str], optional: list[str],
             )
 
 
+def _browser_launches(python: Path) -> bool:
+    """Can the browser the toolchain will drive actually start on this host?
+
+    A browser binary existing is not the same as a browser that runs. On a
+    fresh Debian/Ubuntu machine the downloaded Chromium is present but cannot
+    start, because the operating system libraries it links against were never
+    installed. Asking the binary for its version is the cheapest honest probe:
+    it starts the browser far enough to answer, and it fails loudly when the
+    shared libraries are missing.
+
+    A probe that cannot run at all is not evidence of a broken browser, so it
+    is reported as unknown rather than as a failure.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from exporter import _find_chrome  # type: ignore
+    except (ImportError, OSError, AttributeError):
+        _find_chrome = None  # type: ignore
+    browser = ""
+    if _find_chrome is not None:
+        try:
+            browser = _find_chrome() or ""
+        except (OSError, ValueError, AttributeError):
+            browser = ""
+    if not browser:
+        # The Playwright-managed build may still be the one the toolchain uses.
+        cache = Path.home() / ".cache" / "ms-playwright"
+        try:
+            for candidate in sorted(cache.glob("chromium-*/chrome-linux*/chrome")):
+                browser = str(candidate)
+                break
+        except OSError:
+            browser = ""
+    if not browser:
+        return True  # nothing to probe; the capability check reports this honestly
+    try:
+        probe = subprocess.run(
+            [browser, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return True  # could not probe; do not claim the browser is broken
+    return probe.returncode == 0
+
+
 def install_browser(python: Path) -> None:
     step("installing the Chromium build Playwright drives (optional)")
-    result = subprocess.run(
-        [str(python), "-m", "playwright", "install", "chromium"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip().splitlines()
-        tail = detail[-1] if detail else "no output"
-        warn(
-            "the Chromium build could not be downloaded, so the PDF edition "
-            f"stays pending until a browser is available: {tail}"
+    # "playwright install chromium" downloads the browser binary but not the
+    # operating system libraries it links against. On a fresh Debian/Ubuntu host
+    # the browser then fails to start ("libglib-2.0.so.0: cannot open shared
+    # object file") and the PDF edition - the primary output - stays pending on
+    # a machine that followed this install exactly. "--with-deps" installs those
+    # libraries too. It needs root on Linux, so it is attempted there and the
+    # plain download is kept as the fallback when it is refused.
+    installed = False
+    if sys.platform.startswith("linux"):
+        deps = subprocess.run(
+            [str(python), "-m", "playwright", "install", "--with-deps", "chromium"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
-        warn(
-            "install a browser yourself and re-run the capability check to "
-            "confirm: on Debian or Ubuntu 'sudo apt install chromium', on "
-            "macOS 'brew install --cask google-chrome'"
+        if deps.returncode == 0:
+            installed = True
+        else:
+            detail = (deps.stderr or deps.stdout).strip().splitlines()
+            tail = detail[-1] if detail else "no output"
+            warn(
+                "the Chromium build could not be installed with its system "
+                f"dependencies, so the PDF edition may stay pending: {tail}"
+            )
+            warn(
+                "install the browser's system libraries yourself and re-run the "
+                "capability check to confirm: on Debian or Ubuntu 'sudo apt "
+                "install libglib2.0-0 libnss3 libnspr4 libdbus-1-3 libatk1.0-0 "
+                "libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 "
+                "libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 "
+                "libcairo2 libasound2'"
+            )
+    if not installed:
+        result = subprocess.run(
+            [str(python), "-m", "playwright", "install", "chromium"],
+            capture_output=True,
+            text=True,
         )
+        if result.returncode == 0:
+            installed = True
+        else:
+            detail = (result.stderr or result.stdout).strip().splitlines()
+            tail = detail[-1] if detail else "no output"
+            warn(
+                "the Chromium build could not be downloaded, so the PDF edition "
+                f"stays pending until a browser is available: {tail}"
+            )
+            warn(
+                "install a browser yourself and re-run the capability check to "
+                "confirm: on Debian or Ubuntu 'sudo apt install chromium', on "
+                "macOS 'brew install --cask google-chrome'"
+            )
+            return
+    if installed:
+        launchable = _browser_launches(python)
+        if not launchable:
+            warn(
+                "the browser was installed but it cannot be launched on this "
+                "host, so the PDF edition stays pending. On Debian or Ubuntu the "
+                "browser's system libraries are usually missing; install them "
+                "and re-run the capability check to confirm."
+            )
+
 
 
 # --------------------------------------------------------------- the skill copy

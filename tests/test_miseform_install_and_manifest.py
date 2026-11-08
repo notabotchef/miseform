@@ -312,6 +312,151 @@ def test_the_capability_diagnostic_reports_three_separate_outcomes():
         assert entry["reason"], key
 
 
+def test_the_diagnostic_reports_a_browser_that_cannot_launch_as_pending(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A browser that exists but cannot start is not a usable browser.
+
+    On a fresh Debian/Ubuntu host the Playwright-managed Chromium is present
+    yet fails with "libglib-2.0.so.0: cannot open shared object file", because
+    the operating system libraries it links against were never installed.
+    Reporting that as AVAILABLE tells the cook the PDF edition works when it
+    cannot, so the diagnostic must verify launchability, not mere presence.
+    """
+    monkeypatch.setattr(capability_check, "_module_present", lambda name: True)
+    monkeypatch.setattr(capability_check, "_find_browser", lambda: "/opt/chrome")
+    monkeypatch.setattr(capability_check, "_browser_launch_probe", lambda b: False)
+    entry = capability_check._pdf_outcome()
+    assert entry["outcome"] == "pending"
+    assert "cannot be launched" in entry["reason"]
+    assert "/opt/chrome" in entry["reason"]
+    assert "--with-deps" in entry["remedy"] or "chromium" in entry["remedy"].lower()
+
+    # A browser that launches is AVAILABLE.
+    monkeypatch.setattr(capability_check, "_browser_launch_probe", lambda b: True)
+    entry = capability_check._pdf_outcome()
+    assert entry["outcome"] == "available"
+
+    # A probe that could not run at all is not evidence of a broken browser.
+    monkeypatch.setattr(capability_check, "_browser_launch_probe", lambda b: None)
+    entry = capability_check._pdf_outcome()
+    assert entry["outcome"] == "available"
+
+
+def test_the_launch_probe_reads_the_binary_and_never_starts_it(
+    tmp_path: Path,
+):
+    """The probe answers True, False, or None - and None is not False.
+
+    The diagnostic is a pure reader: it never launches the browser and never
+    shells out, so it cannot have side effects on the host it inspects. It
+    reaches its answer by reading the binary's own dynamic section.
+    """
+    # A binary that is not an ELF file carries no answer, not a wrong one.
+    not_elf = tmp_path / "not-elf"
+    not_elf.write_bytes(b"MZ\x00\x00 this is a mach-o binary")
+    assert capability_check._elf_needed_libraries(str(not_elf)) is None
+    assert capability_check._elf_missing_shared_libraries(str(not_elf)) == []
+    assert capability_check._browser_launch_probe(str(not_elf)) is None
+
+    # A path that does not exist cannot be read; that is unknown, not broken.
+    assert capability_check._browser_launch_probe(str(tmp_path / "absent")) is None
+
+    # The real question: a browser whose system libraries are missing cannot
+    # start. The probe finds that from the binary's own DT_NEEDED entries.
+    real = Path("/proc/self/exe")
+    if real.exists():
+        # This interpreter links libraries that DO exist here, so nothing is
+        # missing and the probe stays honest rather than guessing.
+        missing = capability_check._elf_missing_shared_libraries(str(real))
+        assert isinstance(missing, list)
+        for name in missing:
+            assert isinstance(name, str) and name
+
+
+def test_the_probe_names_the_libraries_the_browser_cannot_find(tmp_path: Path):
+    """A missing library must be named, so the remedy can be specific."""
+    # Build a minimal ELF64 whose dynamic section requires one library name
+    # that cannot exist on this host. The section offsets must match where
+    # the bytes actually land in the file, so they are computed, not guessed.
+    import struct
+
+    lib = "libdefinitely-not-a-real-library.so.99"
+    dynstr = b"\x00" + lib.encode() + b"\x00"
+    dyn = struct.pack("<qQ", 1, 1) + struct.pack("<qQ", 0, 0)  # DT_NEEDED, DT_NULL
+    shstrtab = b"\x00.dynamic\x00.dynstr\x00"
+
+    dyn_off = 0x100
+    dynstr_off = dyn_off + len(dyn)
+    shstr_off = dynstr_off + len(dynstr)
+    e_shoff = shstr_off + len(shstrtab)
+
+    def section(name_off: int, kind: int, offset: int, size: int, link: int) -> bytes:
+        return struct.pack(
+            "<IIQQQQIIQQ", name_off, kind, 0, 0, offset, size, link, 0, 0, 0
+        )
+
+    sh = b"".join(
+        [
+            section(1, 6, dyn_off, len(dyn), 2),  # .dynamic  -> links .dynstr
+            section(12, 3, shstr_off, len(shstrtab), 0),  # .shstrtab
+            section(21, 3, dynstr_off, len(dynstr), 0),  # .dynstr
+        ]
+    )
+    eh = bytearray(64)
+    eh[0:4] = b"\x7fELF"
+    eh[4] = 2  # ELFCLASS64
+    eh[5] = 1  # little endian
+    eh[6] = 1  # version
+    struct.pack_into("<Q", eh, 0x28, e_shoff)
+    struct.pack_into("<H", eh, 0x34, 64)  # e_ehsize
+    struct.pack_into("<H", eh, 0x3A, 64)  # e_shentsize
+    struct.pack_into("<H", eh, 0x3C, 3)  # e_shnum
+    blob = bytes(eh) + b"\x00" * (dyn_off - 64) + dyn + dynstr + shstrtab + sh
+    path = tmp_path / "elf"
+    path.write_bytes(blob)
+
+    assert capability_check._elf_needed_libraries(str(path)) == [lib]
+    missing = capability_check._elf_missing_shared_libraries(str(path))
+    assert lib in missing, missing
+
+    # A browser whose libraries are missing cannot launch. The probe says so.
+    assert capability_check._browser_launch_probe(str(path)) is False
+def test_the_installer_installs_the_browser_with_its_system_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """On Linux the installer must ask for the browser's system libraries too.
+
+    "playwright install chromium" downloads the binary but not the libraries it
+    links against, so a fresh Debian/Ubuntu host ends up with a browser that
+    cannot start and a PDF edition that stays pending.
+    """
+    calls: list[list[str]] = []
+
+    class _Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        return _Result()
+
+    monkeypatch.setattr(installer.subprocess, "run", fake_run)
+    monkeypatch.setattr(installer.sys, "platform", "linux")
+    monkeypatch.setattr(installer, "_browser_launches", lambda python: True)
+    installer.install_browser(Path(sys.executable))
+
+    assert any("--with-deps" in c for c in calls), calls
+
+    # Off Linux the plain download is enough, and no system libraries are needed.
+    calls.clear()
+    monkeypatch.setattr(installer.sys, "platform", "darwin")
+    installer.install_browser(Path(sys.executable))
+    assert not any("--with-deps" in c for c in calls), calls
+    assert any("chromium" in " ".join(c) for c in calls), calls
+
+
 def test_the_diagnostic_tells_a_missing_dependency_from_a_missing_browser(
     monkeypatch: pytest.MonkeyPatch,
 ):
