@@ -468,3 +468,84 @@ def test_pdf_weight_readback_preserves_row_identity_and_wrapping(decimal):
     )
     assert pdf_row_weights(text) == {"E1": 420.5, "E2": 18.5}
 
+
+# ------------------------------------------- canonical JSON selection ----------------
+
+def test_canonical_json_record_is_selected_by_manifest_not_by_listing_order(tmp_path):
+    """The canonical JSON edition is chosen by the name the build manifest
+    declares, never by position in the directory listing.
+
+    A build output directory holds several *.json files: the canonical
+    record, the build manifest and (with a workflow ledger) the receipt.
+    The manifest carries no top-level language or theme, so a positional
+    pick can read it instead of the record and fail a clean parity proof.
+    """
+    import build_card
+    from locale_parity_proof import canonical_json_record
+
+    code = build_card.main(
+        ["--outdir", str(tmp_path), "--lang", "fr", "--theme", "atelier",
+         "--skip-pdf", "--skip-xlsx", str(DEMO_002)]
+    )
+    assert code == 0
+
+    written = sorted(tmp_path.glob("*.json"))
+    assert len(written) == 2, "expected the canonical record and the manifest"
+
+    manifest_path = next(p for p in written if p.name.endswith(".manifest.json"))
+    record_path = canonical_json_record(tmp_path)
+
+    # The manifest declares the record by name; that is what we select.
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert record_path.name == manifest["artifacts"]["json"]["name"]
+    assert record_path.is_file()
+
+    # The manifest must not be selectable as the record: it has no
+    # top-level language or theme, so picking it fails a clean build.
+    assert "language" not in manifest
+    assert "theme" not in manifest
+
+    # The selection is independent of listing order: reading the directory
+    # forward and backward yields the same record.
+    forward = sorted(tmp_path.glob("*.json"))
+    backward = sorted(tmp_path.glob("*.json"), reverse=True)
+    assert forward != backward, "expected the two orderings to differ"
+    assert canonical_json_record(tmp_path) == record_path
+
+
+def test_canonical_json_record_rejects_an_output_directory_without_a_manifest(tmp_path):
+    """A directory with no build manifest cannot name the canonical record,
+    so the selection fails loudly instead of guessing."""
+    from locale_parity_proof import canonical_json_record
+
+    (tmp_path / "card.json").write_text(json.dumps({"language": "fr"}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="exactly one build manifest"):
+        canonical_json_record(tmp_path)
+
+
+def test_canonical_json_record_rejects_a_manifest_that_declares_no_json(tmp_path):
+    """A manifest without a declared JSON artifact cannot name the record."""
+    from locale_parity_proof import canonical_json_record
+
+    (tmp_path / "card.manifest.json").write_text(
+        json.dumps({"artifacts": {"pdf": {"name": "card.pdf"}}}), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="declares no JSON artifact"):
+        canonical_json_record(tmp_path)
+
+
+def test_parity_proof_reports_the_cli_spot_check_on_a_clean_build(tmp_path, monkeypatch, capsys):
+    """A clean parity proof still reports that the CLI persisted the resolved
+    language and theme on the canonical JSON record, and still exits 0."""
+    import locale_parity_proof as proof
+
+    monkeypatch.setattr(proof, "THEME_IDS", ("original",))
+    monkeypatch.setattr(proof, "LANGUAGE_CODES", ("en",))
+
+    assert proof.main(["--out", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "CLI persists resolved language and theme on the canonical JSON record" in out
+    assert "PARITY FAILURES" not in out
+
