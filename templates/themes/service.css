@@ -1,0 +1,197 @@
+/* Miseform theme: Service — high-contrast compact kitchen edition.
+   Scoped under [data-theme="service"]. Black rules, compact spacing,
+   smaller type, red alert accent; built to survive a busy station.
+   Values are deltas over the base stylesheet. */
+[data-theme="service"]{
+  --ink:#000000;
+  --muted:#333333;
+  --accent:#b00020;
+  --rule:#000000;
+  --paper:#ffffff;
+  --body-bg:#ffffff;
+}
+[data-theme="service"] .page{
+  max-width:1000px;
+  margin:24px auto;
+  padding:26px 28px 20px;
+}
+[data-theme="service"] .masthead{
+  border-top:3px solid var(--ink);
+  padding-top:10px;
+  margin-bottom:16px;
+}
+[data-theme="service"] .brand{
+  font-size:20px;
+}
+[data-theme="service"] .eyebrow{
+  color:var(--accent);
+  font-size:9px;
+  letter-spacing:0.2em;
+  margin-bottom:8px;
+}
+[data-theme="service"] h1{
+  font-size:clamp(26px,4vw,40px);
+  margin-bottom:12px;
+}
+[data-theme="service"] .hero{
+  grid-template-columns:1fr;
+  gap:12px;
+}
+[data-theme="service"] .intro{
+  font-size:14.5px;
+  line-height:1.5;
+  max-width:none;
+}
+[data-theme="service"] .facts{
+  gap:14px 18px;
+  padding:5px 0;
+}
+[data-theme="service"] .fact dt{
+  font-size:8px;
+  letter-spacing:0.16em;
+}
+[data-theme="service"] .status{
+  border-bottom:2px solid var(--ink);
+  padding:10px 0;
+  margin:12px 0 0;
+  font-size:10px;
+}
+[data-theme="service"] .status strong{
+  color:var(--accent);
+}
+[data-theme="service"] .meta{
+  font-size:10px;
+  margin:8px 0 14px;
+  line-height:1.6;
+  max-width:none;
+}
+[data-theme="service"] .recipe-body{
+  grid-template-columns:1fr;
+  gap:18px;
+}
+[data-theme="service"] h2{
+  font-size:9.5px;
+  margin:0 0 10px;
+  padding-top:8px;
+}
+[data-theme="service"] h3{
+  font-size:9px;
+  margin:0 0 10px;
+}
+[data-theme="service"] table{
+  font-size:11.5px;
+}
+[data-theme="service"] td{
+  padding:6px 4px;
+}
+[data-theme="service"] .group th{
+  padding:10px 0 4px;
+  font:italic 12px Georgia,serif;
+}
+[data-theme="service"] .yield td{
+  font-size:10.5px;
+}
+[data-theme="service"] .caption{
+  font-size:10.5px;
+  line-height:1.55;
+  margin:10px 0 0;
+}
+[data-theme="service"] .directions{
+  gap:16px;
+}
+[data-theme="service"] .steps li{
+  grid-template-columns:22px 1fr;
+  gap:8px;
+  margin:0 0 10px;
+}
+[data-theme="service"] .step-no{
+  color:var(--accent);
+  font-size:18px;
+}
+[data-theme="service"] .steps p{
+  font-size:13.5px;
+  line-height:1.55;
+}
+[data-theme="service"] .tip{
+  font-size:10px;
+  margin:4px 0 0 38px;
+}
+[data-theme="service"] .notes{
+  gap:18px 30px;
+  margin-top:26px;
+}
+[data-theme="service"] .note h3{
+  font-size:9.5px;
+  margin-bottom:4px;
+}
+[data-theme="service"] .note p{
+  font-size:12.5px;
+  line-height:1.6;
+}
+[data-theme="service"] .release{
+  margin-top:22px;
+}
+[data-theme="service"] .release h2{
+  font-size:9px;
+  color:var(--accent);
+}
+[data-theme="service"] .release ul{
+  font-size:11px;
+  line-height:1.6;
+}
+[data-theme="service"] .trace{
+  font-size:8.5px;
+  margin-top:20px;
+}
+[data-theme="service"] .footer{
+  font-size:8px;
+  margin-top:22px;
+}
+/* Print uses normal block flow so a long method can paginate one step at a
+   time. Avoiding the entire stage moves its heading away from its contents. */
+@media print{
+  [data-theme="service"] body{background:white}
+  [data-theme="service"] .page{margin:0;padding:0;max-width:none;background:white}
+  [data-theme="service"] .masthead{padding-top:2mm;margin-bottom:3mm;font-size:7pt}
+  [data-theme="service"] .brand{font-size:15pt}
+  [data-theme="service"] .eyebrow{font-size:7pt;letter-spacing:.12em;margin-bottom:2mm}
+  [data-theme="service"] h1{font-size:23pt;margin-bottom:2mm}
+  [data-theme="service"] .hero{grid-template-columns:1.1fr 1fr;gap:5mm}
+  [data-theme="service"] .intro{font-size:10pt;line-height:1.4}
+  [data-theme="service"] .facts{gap:2mm 3mm;padding:0}
+  [data-theme="service"] .fact{font-size:8pt;line-height:1.35}
+  [data-theme="service"] .fact dt{font-size:6.5pt;letter-spacing:.08em}
+  [data-theme="service"] .fact dd{margin-top:.8mm}
+  [data-theme="service"] .fact strong{font-size:9pt}
+  [data-theme="service"] .status{margin-top:2mm;padding:2mm 0;font-size:8pt;line-height:1.4}
+  [data-theme="service"] .meta{font-size:8pt;line-height:1.4;margin:2mm 0 3mm}
+  [data-theme="service"] .recipe-body,
+  [data-theme="service"] .directions{display:block}
+  [data-theme="service"] .method{margin-top:4mm}
+  [data-theme="service"] h2{font-size:8pt;padding-top:2mm;margin-bottom:2mm;break-after:avoid}
+  [data-theme="service"] h3{font-size:8pt;margin-bottom:1.5mm;break-after:avoid}
+  [data-theme="service"] table{font-size:9pt;line-height:1.35}
+  [data-theme="service"] th{font-size:7pt;padding:0 3px 1.5mm}
+  [data-theme="service"] td{padding:1mm 3px}
+  [data-theme="service"] .group th{font-size:9pt;padding:2mm 0 1mm}
+  [data-theme="service"] .yield td{font-size:8pt}
+  [data-theme="service"] .caption{font-size:8pt;line-height:1.4;margin-top:2mm}
+  [data-theme="service"] .stage{break-inside:auto;margin-bottom:3mm}
+  [data-theme="service"] .steps li{grid-template-columns:5mm 1fr;gap:2mm;margin-bottom:2mm;break-inside:avoid}
+  [data-theme="service"] .step-no{font-size:13pt}
+  [data-theme="service"] .steps p{font-size:10pt;line-height:1.4;orphans:2;widows:2}
+  [data-theme="service"] .tip{font-size:8pt;line-height:1.4;margin:1mm 0 0 7mm}
+  [data-theme="service"] .step-settings{font-size:9pt;line-height:1.4;margin-top:1mm}
+  [data-theme="service"] .process{break-inside:auto;margin-top:4mm}
+  [data-theme="service"] .process p{font-size:9pt;line-height:1.4;margin-bottom:1.5mm;break-inside:avoid}
+  [data-theme="service"] .notes{display:block;margin-top:4mm;padding-top:3mm}
+  [data-theme="service"] .note{margin-bottom:3mm;break-inside:auto}
+  [data-theme="service"] .note h3{font-size:8pt;margin-bottom:1mm}
+  [data-theme="service"] .note p{font-size:9pt;line-height:1.4;orphans:2;widows:2}
+  [data-theme="service"] .release{margin-top:4mm;padding-top:3mm;break-inside:auto}
+  [data-theme="service"] .release h2{font-size:8pt}
+  [data-theme="service"] .release ul{font-size:9pt;line-height:1.4}
+  [data-theme="service"] .release li{break-inside:avoid}
+  [data-theme="service"] .trace{font-size:8pt;line-height:1.4;margin-top:4mm;padding-top:3mm}
+  [data-theme="service"] .footer{font-size:7pt;margin-top:4mm;padding-top:2mm}
+}

@@ -1,0 +1,214 @@
+/* Miseform theme: Ledger — precise tabular prep edition.
+   Scoped under [data-theme="ledger"]. Full table grid, tabular figures,
+   visible headers and tight rows built around the ingredient table and
+   batch-scaling math. Values are deltas over the base stylesheet. */
+[data-theme="ledger"]{
+  --ink:#1a1a1a;
+  --muted:#555555;
+  --accent:#4a4a4a;
+  --rule:#8a8a8a;
+  --paper:#ffffff;
+  --body-bg:#ffffff;
+}
+[data-theme="ledger"] .page{
+  max-width:none;
+  margin:18px auto;
+  padding:20px 26px;
+}
+[data-theme="ledger"] .masthead{
+  border-top:2px solid var(--ink);
+  padding-top:10px;
+  margin-bottom:40px;
+}
+[data-theme="ledger"] .brand{
+  font:16px var(--font-sans);
+  text-transform:uppercase;
+  letter-spacing:0.2em;
+}
+[data-theme="ledger"] .eyebrow{
+  color:var(--muted);
+  font-size:9px;
+  letter-spacing:0.18em;
+  margin-bottom:14px;
+}
+[data-theme="ledger"] h1{
+  font:20px var(--font-sans);
+  letter-spacing:-0.02em;
+  margin-bottom:10px;
+  max-width:none;
+}
+[data-theme="ledger"] .hero{
+  grid-template-columns:1fr 1fr;
+  gap:26px;
+}
+[data-theme="ledger"] .intro{
+  font-size:12.5px;
+  line-height:1.5;
+  max-width:none;
+}
+[data-theme="ledger"] .facts{
+  gap:14px 20px;
+  margin:0;
+  padding:0;
+}
+[data-theme="ledger"] .fact{
+  font-size:10px;
+  line-height:1.45;
+}
+[data-theme="ledger"] .fact dt{
+  font-size:7px;
+  letter-spacing:0.14em;
+}
+[data-theme="ledger"] .fact strong{
+  font-size:13px;
+}
+[data-theme="ledger"] .status{
+  border-bottom:2px solid var(--ink);
+  padding:8px 0;
+  margin:22px 0 0;
+  font-size:9.5px;
+}
+[data-theme="ledger"] .status strong{
+  color:var(--accent);
+}
+[data-theme="ledger"] .meta{
+  font-size:9.5px;
+  margin:12px 0 22px;
+  line-height:1.6;
+}
+[data-theme="ledger"] .meta strong{
+  color:var(--ink);
+}
+[data-theme="ledger"] .recipe-body{
+  grid-template-columns:1fr;
+  gap:22px;
+}
+[data-theme="ledger"] h2{
+  font-size:9px;
+  margin:0 0 12px;
+  padding-top:6px;
+}
+[data-theme="ledger"] h3{
+  font-size:9px;
+  margin:0 0 8px;
+}
+[data-theme="ledger"] table{
+  font-size:11px;
+  border:1px solid var(--rule);
+}
+[data-theme="ledger"] th{
+  border:1px solid var(--rule);
+  border-bottom:2px solid var(--ink);
+  background:#f2f2f2;
+  font-size:8px;
+  padding:6px 8px;
+}
+[data-theme="ledger"] td{
+  border:1px solid var(--rule);
+  padding:6px 8px;
+  font-size:11px;
+  font-variant-numeric:tabular-nums;
+}
+[data-theme="ledger"] .num{
+  text-align:right;
+}
+[data-theme="ledger"] .group th{
+  background:#e8e8e8;
+  color:var(--ink);
+  font-weight:600;
+  font-style:normal;
+  font-size:11px;
+  letter-spacing:0;
+  border:1px solid var(--rule);
+  border-bottom:2px solid var(--ink);
+  padding:9px 8px;
+}
+[data-theme="ledger"] .yield td{
+  font-weight:600;
+  border-top:2px solid var(--ink);
+}
+[data-theme="ledger"] .caption{
+  font-size:10.5px;
+  line-height:1.55;
+  margin:10px 0 0;
+  color:var(--muted);
+}
+[data-theme="ledger"] .directions{
+  gap:14px;
+}
+[data-theme="ledger"] .stage{
+  border-top:1px solid var(--rule);
+  padding-top:8px;
+  margin-top:10px;
+  break-inside:avoid;
+}
+[data-theme="ledger"] .steps li{
+  grid-template-columns:22px 1fr;
+  gap:8px;
+  margin:0 0 8px;
+}
+[data-theme="ledger"] .step-no{
+  color:var(--muted);
+  font-size:13px;
+}
+[data-theme="ledger"] .steps p{
+  font-size:12.5px;
+  line-height:1.5;
+}
+[data-theme="ledger"] .tip{
+  font-size:10px;
+  color:var(--muted);
+  margin:4px 0 0 38px;
+}
+[data-theme="ledger"] .notes{
+  grid-template-columns:1fr;
+  gap:20px;
+  margin-top:24px;
+  border:1px solid var(--rule);
+  padding:14px 0 0;
+}
+[data-theme="ledger"] .note{
+  border-bottom:1px solid var(--rule);
+  padding-bottom:10px;
+  break-inside:avoid;
+}
+[data-theme="ledger"] .note:last-child{
+  border-bottom:0;
+  padding-bottom:0;
+}
+[data-theme="ledger"] .note h3{
+  font-size:9.5px;
+  margin-bottom:3px;
+}
+[data-theme="ledger"] .note p{
+  font-size:12px;
+  line-height:1.6;
+}
+[data-theme="ledger"] .release{
+  border:1px solid var(--rule);
+  padding:12px 0 0;
+  margin-top:22px;
+}
+[data-theme="ledger"] .release h2{
+  font-size:9px;
+  color:var(--ink);
+}
+[data-theme="ledger"] .release ul{
+  font-size:10.5px;
+  line-height:1.65;
+}
+[data-theme="ledger"] .trace{
+  font-size:8.5px;
+  margin-top:18px;
+  color:var(--muted);
+}
+[data-theme="ledger"] .footer{
+  font-size:8px;
+  margin-top:20px;
+}
+@media print{
+  [data-theme="ledger"] body{background:white}
+  [data-theme="ledger"] .page{margin:0;padding:0;max-width:none;background:white}
+  [data-theme="ledger"] table{border:1px solid var(--rule)}
+  [data-theme="ledger"] h1{font:24pt var(--font-sans);max-width:none;margin-bottom:2mm}
+}

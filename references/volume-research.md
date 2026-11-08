@@ -5,6 +5,10 @@ it. Read this when an ingredient has a weight but no household measure.
 
 The rule in one line: **research before you dash, and label what you publish.**
 
+The engine that carries these rules is `scripts/volume_research.py`; the
+command that runs it over a card is `scripts/research_volumes.py`. What
+follows is the contract they implement.
+
 ## Why the column matters
 
 A cook who weighs 100 g of sesame does not need the volume to execute the
@@ -14,6 +18,37 @@ the cook nothing; a wrong cell teaches them something false.
 
 Grams stay the production authority. The volume is a derived convenience, and
 it says so.
+
+## The four masses a card keeps apart
+
+A card that mixes these up is wrong in a way no reader can detect, so they
+are separate fields and each is checked:
+
+| Mass | Field | What it is |
+|---|---|---|
+| Gross purchase mass | `components[].gross_purchase_g` | what was bought, before trimming |
+| Edible mass | each row's `weight_g` | what enters the formula |
+| Input sum | `input_total_g` | the sum of the edible masses |
+| Measured finished yield | `usable_yield_g` | what came out, weighed |
+
+The input sum is arithmetic on the edible masses. It is never the gross
+purchase and never the finished yield. A row whose mass was never established
+contributes nothing to the input sum, and a card whose declared input total
+does not match the sum of its established masses is reported.
+
+## Quantities that are not gram masses
+
+A cook may give an amount in their own unit: `2 qt`, `3 ea`, `5 lb`. That
+quantity is recorded in the row's `quantity` field, with the original unit,
+the convention and the source text kept beside it. It is never converted into
+a mass without a source, and it never becomes zero. The row shows the
+cook's quantity; the mass stays unknown until somebody establishes it.
+
+A row's mass may also be written as a formula against another row — a
+percentage of the base, or a multiple of it. The formula names its basis row,
+the mass is resolved from the card's own rows, and a percentage row scales
+from the base it was written against. A formula whose basis is missing or
+whose base mass is unknown stays unknown.
 
 ## When research is required
 
@@ -28,10 +63,13 @@ Do **not** research when:
 
 - the chef measured the volume directly — record the measurement and its method
   instead,
+- the chef gave the quantity in their own unit — that measure is the chef's,
 - the ingredient's density is genuinely unknown and no source addresses that
   ingredient and state — leave a dash and say why,
 - the conversion would need a density you would have to guess. Guessing density
   is the failure this rule exists to prevent.
+
+Research is automatic. A routine conversion is never a question for the chef.
 
 ## Source order
 
@@ -47,29 +85,114 @@ Do **not** research when:
    branded records. Use the entry whose preparation state matches the card:
    whole, roasted and toasted, decorticated, drained, and so on. SR Legacy
    portions carry gram weights per cup, tablespoon and teaspoon.
+4. **A bounded fallback**, used only when nothing above matched. It is always
+   labeled a proxy and carries the lowest confidence.
+
+The bound is two targeted source attempts per ingredient, within the shared whole-run ceiling of 12 search/fetch attempts or 4 minutes. Failures count. After the limit, record the unresolved reason and continue drafting. A provider's HTTP 429 or authentication failure stops that provider for this run, including alternate endpoints; do not generate bespoke fetch scripts or retry it under another ingredient name. Reuse matching checked references. An ingredient skipped because the shared budget ran out must say so; do not pretend it received an individual search. An unresolved result with an honest reason is valid for an unreleased draft.
+
+### What disqualifies a source
+
+- A source whose figure is a **fat line** on a nutrition panel is not the
+  serving's total weight. Only a total-mass measurement may be used.
+- A source that covers a **cooked** item cannot answer a **raw** question, and
+  a cooked-meat chart cannot be applied to raw seafood in silence.
+- A source for a **different product** — a table-salt figure is not a
+  kosher-salt figure, and a purchased brand label is not a generic chart.
+- A source with **no unit convention** cannot be published at all, because the
+  same spoon holds 15 mL in the metric convention and 20 mL in the Australian
+  one.
+- Two credible sources that **disagree materially** are a conflict the cook
+  settles. They are never averaged, and the higher-ranked one is not quietly
+  published.
+
+## Supplying checked references
+
+This helper does not browse the web. First inspect credible references, then
+supply their recorded ratios with `research_volumes.py CARD.json --sources
+CHECKED-SOURCES.json --cache CACHE.json`. With no source catalogue and no usable
+checked cache entry, the result stays unresolved; zero candidates is not a
+completed web search. The bundled `volume-sources.example.json` contains
+fictional `example.invalid` references for arithmetic fixtures. It is never
+loaded by default and must never be reported as real research.
+
+The JSON root contains a `sources` array. Each entry records one checked
+ratio using these loader fields; no filled example or implementation read
+is needed to author it.
+
+| Required key | Value to record |
+|---|---|
+| `ingredient` | Source ingredient identity, as a string |
+| `url`, `title` | Actual source URL and title, including its row or section locator |
+| `accessed` | Actual access date, `YYYY-MM-DD` |
+| `original_ratio` | Source's own volume-to-mass statement, as a string |
+| `amount`, `grams` | Positive finite numbers: source volume amount and its corresponding mass in grams |
+| `unit` | `cup`, `tbsp`, `tsp` or `quart` |
+| `unit_convention` | `US`, `metric` or `AU`; use the convention supported by the reference |
+
+| Optional key | Loader default and meaning |
+|---|---|
+| `aliases` | `[]`; additional matching ingredient names |
+| `state` | `""`; source preparation state or form |
+| `brand` | `null`; source product brand when established |
+| `tier` | `"chart"`; hierarchy tier: `exact_product`, `chart`, `usda` or `fallback` |
+| `state_match` | `""`; explanation of ingredient and preparation-state agreement |
+| `proxy` | `true`; set `false` only for a matching identity/state without substitution |
+| `confidence` | `"medium"`; evidence confidence, not a measurement claim |
+| `measure` | `"total_mass"`; the ratio must describe total serving mass |
+
+Loader defaults do not establish missing evidence. Record state, match and
+proxy status truthfully; a generic chart does not establish a brand-specific
+or measured batch value. A nutrition panel's fat mass is not serving mass.
+
+Synthetic/example references previously written into a cache are ignored by
+normal/default research. Passing an explicit fixture catalogue can opt into its
+matching synthetic records for tests; doing so does not make them real sources.
+Existing measured volumes remain the cook's supplied evidence. On reprocessing,
+derived volumes are recomputed against current ingredient identity, state and
+resolved mass using matching checked references or cache entries. An unavailable
+reference or mass leaves the previous derived volume withdrawn and unresolved.
+Synthetic/example references also receive an explicit withdrawal note when not
+opted into for a fixture. The input record is preserved; the helper returns an
+updated copy.
+
+## The source cache
+
+Every checked reference is cached under a key made of the ingredient, its
+preparation state and its brand. The cache is state- and brand-aware on
+purpose: the figure checked for table salt is never handed back for kosher
+salt. A cached reference is reused, not re-researched, and the reuse is
+recorded on the card as an attempt.
+
+The cache lives outside the package, at `~/.cache/miseform/volume-sources.json`
+by default, or wherever `MISEFORM_VOLUME_CACHE` points.
 
 ## What to record for every published volume
 
-Record these next to the value, not in your head:
+Every published volume carries a structured record, `volume_source`, on the
+row, with:
 
-- **Source title** — "King Arthur Baking Ingredient Weight Chart".
-- **Source URL** — the page you actually read.
-- **Access date** — when you read it. Published ratios drift.
-- **Source ratio** — the source's own figure: "sesame seeds, 1/2 cup = 71 g",
+- **status** — `derived`, `measured`, `unresolved` or `not_applicable`;
+- **source title** and **source URL** — the page actually read;
+- **access date** — when it was read. Published ratios drift.
+- **original ratio** — the source's own figure: "sesame seeds, 1/2 cup = 71 g",
   which is 8.875 g per US tablespoon.
-- **Units convention** — US tablespoon/teaspoon/cup, or the confirmed metric
-  equivalent, spelled out.
-- **Ingredient and state match** — what matched and what did not: brand,
+- **units convention** — US tablespoon/teaspoon/cup, metric, or Australian.
+- **source state** and **state match** — what matched and what did not: brand,
   preparation state, salt type, drained or not.
-- **Proxy status** — exact match, or a labeled generic proxy.
+- **proxy status** and **confidence** — an exact match or a labeled proxy, and
+  how much the figure can be trusted.
+- **measure** — what the source measured. Only `total_mass` may be used.
+- **amount**, **unit** and **grams per unit** — the published figure, so a
+  scaled batch gets the same measure without guessing a density again.
+- **unresolved reason** — when the volume is unresolved, why.
+- **attempts** — the sources that were consulted and what was rejected.
 
-The card keeps the number in the ingredient's `volume` field, a short
-pointer in that row's `notes`, and the full record in a card note block so it
-travels into the Markdown, HTML, PDF and Excel editions. The row stays short:
-preparation state, the step, the proxy marker and which measure governs.
-The source title, URL, access date, ratio, units convention, match and proxy
-status live in the note block, not repeated in every row, so the ingredient
-table stays a table.
+The card keeps the number in the ingredient's `volume` field, the record in
+`volume_source`, and a short pointer in that row's `notes`. The row stays
+short: preparation state, the step, the proxy marker and which measure
+governs. The source title, URL, access date, ratio, units convention, match
+and proxy status live in the record, not repeated in every row, so the
+ingredient table stays a table.
 
 ## Labeling the value
 
@@ -79,6 +202,7 @@ table stays a table.
 - A generic proxy is labeled as a proxy, in the row and in the source record.
   "Whole dried seed chart applied to a purchased roasted product" is honest;
   "1/2 cup" is not.
+- The unit convention is named every time: `(US)`, `(metric)` or `(AU)`.
 - Round for the kitchen, and say the rounding: 11.27 tbsp shown as ≈ 11.3
   tbsp, rounded to the nearest 0.1 tbsp.
 
@@ -86,17 +210,17 @@ table stays a table.
 
 State the standard explicitly and never mix conventions inside one card.
 
-| Measure | US | Metric |
-|---|---|---|
-| tablespoon | 14.79 mL (15 mL) | 15 mL |
-| teaspoon | 4.93 mL (5 mL) | 5 mL |
-| cup | 236.6 mL | 240 mL |
+| Measure | US | Metric | Australian |
+|---|---|---|---|
+| tablespoon | 14.79 mL | 15 mL | 20 mL |
+| teaspoon | 4.93 mL | 5 mL | 5 mL |
+| cup | 236.6 mL | 250 mL | 250 mL |
 
 An **Australian tablespoon is 20 mL**, not 15 mL. A source that reports
 Australian spoons has a 33% larger tablespoon, so its gram-per-tablespoon
 figure must not be dropped into a US-convention card without conversion and a
-statement. The same rule applies to metric sources: convert the ratio, state
-the standard you are publishing in, and record which one the source used.
+statement. A 250 mL cup is the metric and Australian cup, not the US cup, and
+publishing it as one is wrong by six percent.
 
 ## Potent ingredients
 
@@ -158,11 +282,14 @@ That single question beats a number that is wrong by half.
 ## Checklist before you publish
 
 - [ ] An ingredient-specific source was consulted, not a remembered density.
-- [ ] Source title, URL, access date, ratio, units convention and match are
-      recorded.
+- [ ] The source record carries the title, URL, access date, ratio, units
+      convention, state match, proxy status and confidence.
 - [ ] The value carries an approximate marker and names its units convention.
 - [ ] Proxy status is explicit; a generic proxy is labeled as one.
 - [ ] Weights remain authoritative; no potent ingredient is controlled by a
       spoon estimate.
 - [ ] Australian and metric spoon conventions are not mixed in silently.
 - [ ] The source record travels into every exported format.
+- [ ] An ingredient with no measure was researched, and an unresolved one
+      states why it is unresolved.
+

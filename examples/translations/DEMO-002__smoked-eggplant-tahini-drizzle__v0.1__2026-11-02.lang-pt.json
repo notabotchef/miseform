@@ -1,0 +1,106 @@
+{
+  "title": "BERINJELA DEFUMADA COM FIADO DE TAHINI E FLOR DE SAL",
+  "intro": "Um componente vegetal defumado finalizado com um fio de tahini emulsificado a frio. A berinjela é defumada inteira, depois descascada e aparada antes de ser pesada, de modo que os gramas da ficha são a massa comestível que chega ao prato, não a massa bruta. O fio apreende e solta ao ser mexido; o ponto se julga pela textura, não pelo tempo.",
+  "allergens": "Gergelim (tahini). A revisão de rótulo simulada não declara alérgenos adicionais. Utensílios compartidos precisam de controles de contato cruzado da casa; nenhuma reivindicação livre de alérgenos.",
+  "library_name": "Cozinha de demonstração",
+  "stage.0.name": "DEFUMAÇÃO",
+  "stage.2.name": "ACABAMENTO E PORÇÃO",
+  "components": [
+    {
+      "name": "Para a berinjela defumada",
+      "ingredients": [
+        {
+          "row_id": "E1",
+          "name": "Berinjela japonesa, defumada com lascas de hickory, descascada e cortada em comprimentos de 6 cm"
+        },
+        {
+          "row_id": "E2",
+          "name": "Óleo de semente de uva (grapeseed) escovado na grelha antes de defumar"
+        }
+      ]
+    },
+    {
+      "name": "Para o fio de tahini",
+      "ingredients": [
+        {
+          "row_id": "T1",
+          "name": "Tahini não decorticado, mexido até consistência líquida"
+        },
+        {
+          "row_id": "T2",
+          "name": "Suco de limão"
+        },
+        {
+          "row_id": "T3",
+          "name": "Água fria"
+        }
+      ]
+    },
+    {
+      "name": "Para o acabamento",
+      "ingredients": [
+        {
+          "row_id": "F1",
+          "name": "Sal em flocos, estilo Maldon"
+        },
+        {
+          "row_id": "F2",
+          "name": "Pimenta preta, quebrada grosseiramente"
+        }
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "steps": [
+        {
+          "number": 1,
+          "text": "Acuse o defumador com lascas de hickory e leve-o a aproximadamente 105 °C. Disponha os comprimentos de berinjela (E1) na grelha em uma única camada, deixando espaço entre cada pedaço para que a fumaça atinja todos os lados. Escove a grelha com óleo de semente de uva (E2) primeiro para que nada grude. Defume por 22 minutos desde o primeiro lasca, virando a berinjela uma vez a 11 minutos, até que a pele esteja borbulhada por toda parte e a polpa ceda sob a ponta de uma colher. Equipamento recomendado: defumador, lascas de hickory, grelha. Ponto final: pele borbulhada, polpa macia, sem resistência crua."
+        },
+        {
+          "number": 2,
+          "text": "Transfira a berinjela defumada (E1) para uma tigela, cubra-a hermeticamente e deixe descansar por 8 minutos para que o vapor solte a pele. Descasque a pele em tiras e descarte-a. Corte a polpa em comprimentos de 6 cm, pese a polpa aparada na balança de 0,1 g e registre a massa real; nunca substitua um número chutado se o corte diferir da referência."
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "number": 3,
+          "text": "Coloque o tahini (T1) em uma tigela pequena. Adicione o suco de limão (T2) e a água fria (T3) em duas adições, mexendo entre cada uma. A mistura vai apreender e engrossar antes de soltar; continue mexendo até atingir uma consistência líquida que cubra uma colher e deixe um rastro por 3 segundos. A base de tahini está fixada em 90 g, então ajuste apenas com suco de limão ou água, nunca com mais tahini, e registre qualquer ajuste nas notas de teste."
+        },
+        {
+          "number": 4,
+          "text": "Prove o fio finalizado para o equilíbrio. Deve saber a tahini e limão, com o sal vindo do sal em flocos na finalização, não do fio. Registre qualquer ponto final falhado para revisão do chef."
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "number": 5,
+          "text": "Disponha os comprimentos de berinjela defumada em um prato quente em uma única camada. Regue a mistura de tahini uniformemente sobre as superfícies cortadas, cerca de 8,0 g por porção. Polvilhe o sal em flocos (F1) e a pimenta preta quebrada grosseiramente (F2) por cima imediatamente antes de servir, para que nada fique tempo suficiente no sal para extrair umidade."
+        },
+        {
+          "number": 6,
+          "text": "Pese cada porção finalizada a 8,0 g e registre a massa utilizável contra o rendimento de referência de 598 g. Qualquer porção fora de 7,5 g a 8,5 g é re-pesada, não aproximada. Registre a massa utilizável real e a perda de transferência em cada teste."
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "heading": "Serviço e montagem",
+      "text": "Sirva quente em pratos quentes, como componente, não como prato isolado. Nenhuma fotografia de montagem verificada disponível; as instruções de montagem são o registro de referência."
+    },
+    {
+      "heading": "Conservação e armazenamento",
+      "text": "Não resolvido: condições aprovadas, recipiente, rotulagem, base de validade e regra de descarte. Nenhum prazo de validade atribuído. A produção permanece bloqueada."
+    }
+  ],
+  "facts": {
+    "time_total": "22 minutos",
+    "yield_summary": "598 g utilizáveis",
+    "yield_portions": "74 porções a 8,0 g"
+  }
+}

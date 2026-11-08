@@ -26,6 +26,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from volume_research import CONVENTION_LABELS, round_measure as _round_measure
+from locales import DEFAULT_LANGUAGE as _LOCALE_DEFAULT, localize_decimals, translate
+
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "references" / "card.schema.json"
 
 # Tolerance for float comparison of grams. 0.01 g is below any kitchen scale
@@ -98,9 +101,11 @@ def na_reason(value: Any) -> str:
     text = str(value or "").strip()
     if not text.lower().startswith(_NA_PREFIXES):
         return ""
-    if "-" not in text:
+    match = re.fullmatch(r"(?:n/a|na|not applicable)\s*[-–—]\s*(.+)", text, re.IGNORECASE)
+    if match is None:
         return ""
-    return text.split("-", 1)[1].strip()
+    reason = match.group(1).strip()
+    return reason if any(character.isalnum() for character in reason) else ""
 
 
 def applicable_process_controls(controls: dict[str, str]) -> list[tuple[str, str]]:
@@ -132,6 +137,19 @@ def applicable_process_controls(controls: dict[str, str]) -> list[tuple[str, str
 _VOLUME_UNIT_RE = re.compile(
     r"\b(cups?|tbsps?|tablespoons?|tsps?|teaspoons?|milliliters?|millilitres?|"
     r"ml|ounces?|grams?|g|kg|l|dash(es)?|pinch(es)?|pieces?)\b|fl\.?\s*oz",
+    re.IGNORECASE,
+)
+
+# The source status a row must state when it publishes a derived volume:
+# the figure is either an exact match or a labeled generic proxy.
+_SOURCE_STATUS_RE = re.compile(
+    r"\b(exact match|labeled proxy|labelled proxy|generic proxy|proxy)\b",
+    re.IGNORECASE,
+)
+
+# A source record in the notes: a source title, a URL, or an access date.
+_SOURCE_RECORD_RE = re.compile(
+    r"(https?://|source\s+\d|accessed\s+\d{4}-\d{2}-\d{2})",
     re.IGNORECASE,
 )
 
@@ -167,9 +185,20 @@ class Derived:
     component_percentages: dict[str, dict[str, float]] = field(default_factory=dict)
     component_totals: dict[str, float] = field(default_factory=dict)
     input_total_g: float = 0.0
+    input_complete: bool = True
+    input_structure_complete: bool = True
     loss_g: float | None = None
     portions: int | None = None
     portion_remainder_g: float | None = None
+
+    @property
+    def known_input_subtotal_g(self) -> float:
+        """Established mass only; never a full total unless input_complete.
+
+        input_total_g remains a legacy arithmetic accumulator for callers.
+        Canonical card input_total_g must be null when any mass is unknown.
+        """
+        return self.input_total_g
 
 
 def _jsonschema():
@@ -229,6 +258,17 @@ class Card:
         return str(self.data.get("revision_date", ""))
 
     @property
+    def language(self) -> str:
+        """The cook's language for the reading editions, or ``""`` unset.
+
+        Stored on the card record so the choice persists across components
+        and assembly; resolved at build time with ``locales.resolve_language``
+        (CLI flag wins, then this field, then the host environment, then
+        English).
+        """
+        return str(self.data.get("language", ""))
+
+    @property
     def status(self) -> str:
         return str(self.data.get("status", ""))
 
@@ -243,12 +283,82 @@ class Card:
 
     @property
     def ingredients(self) -> list[dict[str, Any]]:
-        """Every ingredient row across all components, in document order."""
+        """Every ingredient row across all components, in document order.
+
+        A component that links to another card's component carries no rows
+        of its own, so it contributes nothing here and its mass is never
+        counted twice.
+        """
         rows: list[dict[str, Any]] = []
         for comp in self.components:
             for ing in comp.get("ingredients", []) or []:
                 rows.append(ing)
         return rows
+
+    @property
+    def linked_components(self) -> list[dict[str, Any]]:
+        """The components this card uses but does not restate."""
+        return [
+            comp
+            for comp in self.components
+            if isinstance(comp.get("linked"), dict)
+        ]
+
+    # ---------------------------------------------------------- mass resolution
+
+    def resolved_weights(self) -> dict[str, float | None]:
+        """The gram mass of every row, or None when it is not established.
+
+        A row's mass comes from its own ``weight_g`` when the cook stated
+        one, and from its ``formula`` when the card states the mass as a
+        percentage or a multiple of another row. A row with neither keeps
+        ``None``: an unknown mass is never replaced by a guessed one, and a
+        quantity supplied in the cook's own unit stays that quantity.
+        """
+        rows = self.ingredients
+        by_id = {str(ing.get("row_id", "")): ing for ing in rows}
+        resolved: dict[str, float | None] = {}
+
+        def resolve(row_id: str, seen: frozenset[str]) -> float | None:
+            if row_id in resolved:
+                return resolved[row_id]
+            row = by_id.get(row_id)
+            if row is None or row_id in seen:
+                return None
+            weight = row.get("weight_g")
+            if isinstance(weight, (int, float)):
+                resolved[row_id] = float(weight)
+                return resolved[row_id]
+            formula = row.get("formula")
+            if isinstance(formula, dict):
+                basis_id = str(formula.get("basis_row_id", ""))
+                basis = resolve(basis_id, seen | {row_id})
+                value = formula.get("value")
+                if basis is not None and isinstance(value, (int, float)):
+                    kind = str(formula.get("kind", ""))
+                    if kind == "percent":
+                        resolved[row_id] = float(basis) * float(value) / 100.0
+                    elif kind == "gram_multiple":
+                        resolved[row_id] = float(basis) * float(value)
+                    else:
+                        resolved[row_id] = None
+                    return resolved[row_id]
+            resolved[row_id] = None
+            return None
+
+        for row in rows:
+            resolve(str(row.get("row_id", "")), frozenset())
+        return resolved
+
+    def unresolved_rows(self) -> list[dict[str, Any]]:
+        """Rows whose gram mass is not established."""
+        resolved = self.resolved_weights()
+        out: list[dict[str, Any]] = []
+        for ing in self.ingredients:
+            row_id = str(ing.get("row_id", ""))
+            if resolved.get(row_id) is None:
+                out.append(ing)
+        return out
 
     @property
     def stages(self) -> list[dict[str, Any]]:
@@ -319,11 +429,16 @@ class Card:
         out.extend(self._check_row_ids())
         out.extend(self._check_component_references())
         out.extend(self._check_input_total())
+        out.extend(self._check_purchase_and_edible_mass())
+        out.extend(self._check_formulas())
+        out.extend(self._check_linked_components())
         out.extend(self._check_yield_and_portions())
         out.extend(self._check_step_numbering())
         out.extend(self._check_ingredient_coverage())
         out.extend(self._check_release_gating())
         out.extend(self._check_unverified_volumes())
+        out.extend(self._check_ingredient_notes_convention())
+        out.extend(self._check_volume_research_evidence())
         out.extend(self._check_process_controls())
         out.extend(self._check_labeling())
         return out
@@ -356,8 +471,13 @@ class Card:
 
     def _check_component_references(self) -> list[Finding]:
         out: list[Finding] = []
+        resolved = self.resolved_weights()
         for comp in self.components:
             name = str(comp.get("name", ""))
+            if isinstance(comp.get("linked"), dict):
+                # A linked component carries no rows of its own, so it has no
+                # reference row to name and no mass to check twice.
+                continue
             ref_id = str(comp.get("reference_row_id", ""))
             ref_weight = comp.get("reference_weight_g")
             ings = comp.get("ingredients", []) or []
@@ -373,7 +493,7 @@ class Card:
                 )
                 continue
 
-            row_weight = match.get("weight_g")
+            row_weight = resolved.get(ref_id)
             if isinstance(ref_weight, (int, float)) and isinstance(row_weight, (int, float)):
                 if not math.isclose(float(ref_weight), float(row_weight), abs_tol=GRAM_EPSILON):
                     out.append(
@@ -387,13 +507,17 @@ class Card:
 
     def _check_input_total(self) -> list[Finding]:
         out: list[Finding] = []
-        total = 0.0
-        for ing in self.ingredients:
-            weight = ing.get("weight_g")
-            if isinstance(weight, (int, float)):
-                total += float(weight)
+        derived = self.derived()
+        total = derived.known_input_subtotal_g
 
         declared = self.data.get("input_total_g")
+        if declared is not None and not derived.input_complete:
+            out.append(Finding(
+                "input-total-incomplete",
+                "input_total_g must be null while any ingredient mass is unresolved; "
+                f"known mass subtotal is {total:g} g, not a complete input total",
+                path="input_total_g",
+            ))
         if isinstance(declared, (int, float)):
             if not math.isclose(float(declared), total, abs_tol=GRAM_EPSILON):
                 out.append(
@@ -401,6 +525,113 @@ class Card:
                         "input-total-mismatch",
                         f"declared input_total_g {declared} g does not equal the sum of ingredient weights {total:g} g",
                         path="input_total_g",
+                    )
+                )
+        return out
+
+    def _check_purchase_and_edible_mass(self) -> list[Finding]:
+        """The as-purchased mass, the edible mass and the input sum are
+        three different numbers, and each one is checked against the card.
+
+        A component may state the gross mass it was bought as. That mass is
+        never the edible mass that enters the formula, and the input sum is
+        never the gross purchase.
+        """
+        out: list[Finding] = []
+        resolved = self.resolved_weights()
+        for comp in self.components:
+            name = str(comp.get("name", ""))
+            gross = comp.get("gross_purchase_g")
+            if not isinstance(gross, (int, float)):
+                continue
+            edible = 0.0
+            for ing in comp.get("ingredients", []) or []:
+                weight = resolved.get(str(ing.get("row_id", "")))
+                if isinstance(weight, (int, float)):
+                    edible += float(weight)
+            if edible > float(gross) + GRAM_EPSILON:
+                out.append(
+                    Finding(
+                        "edible-exceeds-purchase",
+                        f"component {name!r} states a gross purchase of {gross} g but its "
+                        f"edible masses add to {edible:g} g, which cannot be trimmed out of "
+                        "a smaller purchase",
+                        path=self._comp_path(comp),
+                    )
+                )
+        return out
+
+    def _check_formulas(self) -> list[Finding]:
+        """A formula states a mass against another row, and it must resolve."""
+        out: list[Finding] = []
+        known = {str(ing.get("row_id", "")) for ing in self.ingredients}
+        resolved = self.resolved_weights()
+        for comp in self.components:
+            for ing in comp.get("ingredients", []) or []:
+                formula = ing.get("formula")
+                if not isinstance(formula, dict):
+                    continue
+                row_id = str(ing.get("row_id", ""))
+                basis_id = str(formula.get("basis_row_id", ""))
+                if basis_id not in known:
+                    out.append(
+                        Finding(
+                            "formula-basis-missing",
+                            f"row {row_id!r} states its mass as a formula against row "
+                            f"{basis_id!r}, which is not in the ingredient table",
+                            path=self._ing_path(comp, ing),
+                        )
+                    )
+                    continue
+                if resolved.get(row_id) is None:
+                    out.append(
+                        Finding(
+                            "formula-unresolved",
+                            f"row {row_id!r} states its mass as a formula against row "
+                            f"{basis_id!r}, whose mass is not established, so this row's "
+                            "mass is unknown",
+                            path=self._ing_path(comp, ing),
+                        )
+                    )
+        return out
+
+    def _check_linked_components(self) -> list[Finding]:
+        """A linked component names the exact version it uses, and its mass
+        is counted once."""
+        out: list[Finding] = []
+        seen: set[tuple[str, str]] = set()
+        for comp in self.linked_components:
+            link = comp.get("linked") or {}
+            component_id = str(link.get("component_id", ""))
+            version = str(link.get("version", ""))
+            name = str(comp.get("name", ""))
+            if not version.strip():
+                out.append(
+                    Finding(
+                        "linked-version-missing",
+                        f"component {name!r} links to {component_id!r} without an exact "
+                        "version; a shared component is used at one known version",
+                        path=self._comp_path(comp),
+                    )
+                )
+            key = (component_id, version)
+            if key in seen:
+                out.append(
+                    Finding(
+                        "linked-component-duplicated",
+                        f"component {name!r} links to {component_id!r} {version!r}, which is "
+                        "already linked on this card; the shared component is counted twice",
+                        path=self._comp_path(comp),
+                    )
+                )
+            seen.add(key)
+            if comp.get("ingredients"):
+                out.append(
+                    Finding(
+                        "linked-component-restated",
+                        f"component {name!r} both links to {component_id!r} and restates "
+                        "ingredients; the formula is written once, in one place",
+                        path=self._comp_path(comp),
                     )
                 )
         return out
@@ -571,6 +802,162 @@ class Card:
                 )
         return out
 
+    def _check_ingredient_notes_convention(self) -> list[Finding]:
+        """The notes string carries what the narrow ingredient row cannot.
+
+        ``references/schema.md`` stores five fields per ingredient row and
+        carries every other promised field in the ``notes`` string. A row
+        that publishes a derived volume therefore has to say where that
+        volume came from and what its status is; a row whose notes carry a
+        source record has to publish the volume that record supports. The
+        narrow schema stays narrow — this check does not widen it.
+        """
+        out: list[Finding] = []
+        for ing in self.ingredients:
+            row_id = ing.get("row_id")
+            volume = str(ing.get("volume") or "").strip()
+            notes = str(ing.get("notes") or "").strip()
+            states_source = bool(_SOURCE_STATUS_RE.search(notes))
+            states_provenance = bool(_SOURCE_RECORD_RE.search(notes))
+
+            if volume.startswith("≈") and not states_source:
+                out.append(
+                    Finding(
+                        "unverified-volume",
+                        f"row {row_id!r} publishes a derived volume but its notes state no source "
+                        "status; the notes must say whether the figure is an exact match or a "
+                        "labeled generic proxy",
+                        path="components",
+                    )
+                )
+            source = ing.get("volume_source")
+            rejected_source = (
+                isinstance(source, dict)
+                and source.get("status") == "unresolved"
+                and bool(str(source.get("unresolved_reason") or "").strip())
+            )
+            if states_provenance and not volume and not rejected_source:
+                out.append(
+                    Finding(
+                        "volume-source-record-without-volume",
+                        f"row {row_id!r} notes carry a source record but the row publishes no "
+                        "volume for it",
+                        path="components",
+                    )
+                )
+        return out
+
+    def _check_volume_research_evidence(self) -> list[Finding]:
+        """A published volume carries its evidence, and a blank volume is
+        either researched or honestly explained.
+
+        A row with a known mass and no published volume must show that the
+        research was attempted: a source record, a stated unresolved reason,
+        or a quantity the cook supplied in their own unit. A row whose mass
+        is not established yet may still be missing a volume, but the card
+        must say why rather than leave it silently blank.
+        """
+        out: list[Finding] = []
+        resolved = self.resolved_weights()
+        for comp in self.components:
+            for ing in comp.get("ingredients", []) or []:
+                row_id = str(ing.get("row_id", ""))
+                volume = str(ing.get("volume") or "").strip()
+                source = ing.get("volume_source")
+                notes = str(ing.get("notes") or "")
+                quantity = ing.get("quantity")
+
+                if volume and not isinstance(source, dict):
+                    # The shipped example carries its source record in the
+                    # notes string; a card that states a derived volume
+                    # still has to say where it came from.
+                    if "proxy" not in notes.lower() and "exact match" not in notes.lower():
+                        out.append(
+                            Finding(
+                                "unverified-volume",
+                                f"row {row_id!r} publishes a derived volume but records no "
+                                "source status; the row must say whether the figure is an "
+                                "exact match or a labeled proxy",
+                                path=self._ing_path(comp, ing),
+                            )
+                        )
+                    continue
+
+                if isinstance(source, dict):
+                    status = str(source.get("status", ""))
+                    if status == "unresolved" and not str(
+                        source.get("unresolved_reason") or ""
+                    ).strip():
+                        out.append(
+                            Finding(
+                                "unresolved-volume-without-reason",
+                                f"row {row_id!r} records an unresolved volume without saying "
+                                "why; an unresolved volume states its reason",
+                                path=self._ing_path(comp, ing),
+                            )
+                        )
+                    if status == "derived" and not volume:
+                        out.append(
+                            Finding(
+                                "volume-source-record-without-volume",
+                                f"row {row_id!r} records a source for its volume but "
+                                "publishes no volume",
+                                path=self._ing_path(comp, ing),
+                            )
+                        )
+                    if status == "derived" and volume:
+                        if not str(source.get("source_url") or "").strip() and not str(
+                            source.get("original_ratio") or ""
+                        ).strip():
+                            out.append(
+                                Finding(
+                                    "volume-source-record-incomplete",
+                                    f"row {row_id!r} publishes a derived volume whose source "
+                                    "record names neither a URL nor the source's own ratio",
+                                    path=self._ing_path(comp, ing),
+                                )
+                            )
+                        convention = source.get("unit_convention")
+                        if convention is None:
+                            out.append(
+                                Finding(
+                                    "volume-convention-unstated",
+                                    f"row {row_id!r} publishes a derived volume without naming "
+                                    "the unit convention; US, metric and Australian measures "
+                                    "are not the same",
+                                    path=self._ing_path(comp, ing),
+                                )
+                            )
+                    continue
+
+                # No source record at all.
+                if isinstance(quantity, dict) and quantity.get("amount") is not None:
+                    # The cook supplied the quantity; it stays the cook's.
+                    continue
+                if resolved.get(row_id) is None:
+                    # The mass itself is unknown; the card may say so.
+                    if "not supplied" not in notes.lower() and "unknown" not in notes.lower():
+                        out.append(
+                            Finding(
+                                "volume-missing-without-reason",
+                                f"row {row_id!r} has no mass and no published volume and does "
+                                "not say why; an unresolved quantity states its reason",
+                                severity="warning",
+                                path=self._ing_path(comp, ing),
+                            )
+                        )
+                    continue
+                out.append(
+                    Finding(
+                        "volume-research-missing",
+                        f"row {row_id!r} has a mass but no published volume and no record "
+                        "that research was attempted; research it, or record the reason "
+                        "it stays unresolved",
+                        path=self._ing_path(comp, ing),
+                    )
+                )
+        return out
+
     def _check_process_controls(self) -> list[Finding]:
         """Every process is answered, and an unused one states why.
 
@@ -644,26 +1031,43 @@ class Card:
     def derived(self) -> Derived:
         """Recompute percentages, totals, loss and portions from the card."""
         derived = Derived()
+        resolved = self.resolved_weights()
 
+        seen_links: set[tuple[str, str]] = set()
         for comp in self.components:
             comp_name = str(comp.get("name", ""))
-            ref_weight = comp.get("reference_weight_g")
-            if not isinstance(ref_weight, (int, float)) or float(ref_weight) <= 0:
+            link = comp.get("linked")
+            if isinstance(link, dict):
+                key = (str(link.get("component_id", "")), str(link.get("version", "")))
+                if comp.get("ingredients") or key in seen_links:
+                    derived.input_complete = False
+                    derived.input_structure_complete = False
+                if key in seen_links:
+                    continue
+                seen_links.add(key)
+                weight = link.get("quantity_g")
+                if isinstance(weight, (int, float)) and not isinstance(weight, bool) and math.isfinite(weight) and weight > 0:
+                    derived.component_totals[comp_name] = float(weight)
+                    derived.input_total_g += float(weight)
+                else:
+                    derived.input_complete = False
                 continue
-
+            ref_weight = comp.get("reference_weight_g")
+            has_reference = isinstance(ref_weight, (int, float)) and ref_weight > 0
             per_component: dict[str, float] = {}
             component_total = 0.0
             for ing in comp.get("ingredients", []) or []:
-                weight = ing.get("weight_g")
                 row_id = str(ing.get("row_id", ""))
+                weight = resolved.get(row_id)
                 if not isinstance(weight, (int, float)):
+                    derived.input_complete = False
                     continue
                 weight = float(weight)
                 component_total += weight
-                pct = 100.0 * weight / float(ref_weight)
-                per_component[row_id] = pct
-                derived.percentages[row_id] = pct
-
+                if has_reference:
+                    pct = 100.0 * weight / float(ref_weight)
+                    per_component[row_id] = pct
+                    derived.percentages[row_id] = pct
             derived.component_percentages[comp_name] = per_component
             derived.component_totals[comp_name] = component_total
             derived.input_total_g += component_total
@@ -672,7 +1076,7 @@ class Card:
         portion = self.data.get("portion_g")
         input_total = self.data.get("input_total_g")
 
-        if isinstance(usable, (int, float)) and isinstance(input_total, (int, float)):
+        if derived.input_complete and isinstance(usable, (int, float)) and isinstance(input_total, (int, float)):
             derived.loss_g = float(input_total) - float(usable)
         if isinstance(usable, (int, float)) and isinstance(portion, (int, float)):
             derived.portions = int(math.floor(float(usable) / float(portion)))
@@ -682,16 +1086,56 @@ class Card:
     def scaled_weights(self, factor: float) -> dict[str, float]:
         """Return scaled ingredient weights for ``factor``.
 
-        Only ingredient quantities scale. Time, temperature, vessel loading and
-        release status never scale.
+        Only ingredient quantities scale. Time, temperature, vessel loading
+        and release status never scale.
+
+        A row whose mass is a formula scales from its base, so a percentage
+        row follows the base it was written against rather than keeping a
+        number that no longer matches the batch.
         """
         if not isinstance(factor, (int, float)) or factor <= 0:
             raise ValueError("scale factor must be a positive number")
+        resolved = self.resolved_weights()
         return {
-            str(ing.get("row_id")): float(ing.get("weight_g", 0.0)) * float(factor)
-            for ing in self.ingredients
-            if isinstance(ing.get("weight_g"), (int, float))
+            row_id: float(weight) * float(factor)
+            for row_id, weight in resolved.items()
+            if isinstance(weight, (int, float))
         }
+
+    def scaled_volumes(self, factor: float) -> dict[str, str]:
+        """Return the scaled household measure for every derived volume.
+
+        A derived volume comes from the authoritative grams and the source's
+        own ratio. When the batch factor changes, the grams change, so the
+        measure changes with them: the card never keeps the base measure on
+        a scaled batch, and it never re-derives the measure from a density it
+        had to guess. A row whose volume was measured, not derived, is not
+        scaled here, because a measured spoonful is not a formula.
+        """
+        if not isinstance(factor, (int, float)) or factor <= 0:
+            raise ValueError("scale factor must be a positive number")
+        scaled = self.scaled_weights(factor)
+        out: dict[str, str] = {}
+        for comp in self.components:
+            for ing in comp.get("ingredients", []) or []:
+                row_id = str(ing.get("row_id", ""))
+                source = ing.get("volume_source")
+                if not isinstance(source, dict):
+                    continue
+                if str(source.get("status", "")) != "derived":
+                    continue
+                grams_per_unit = source.get("grams_per_unit")
+                unit = str(source.get("unit") or "")
+                convention = str(source.get("unit_convention") or "")
+                if not isinstance(grams_per_unit, (int, float)) or not unit:
+                    continue
+                grams = scaled.get(row_id)
+                if not isinstance(grams, (int, float)):
+                    continue
+                amount = float(grams) / float(grams_per_unit)
+                label = CONVENTION_LABELS.get(convention, convention)
+                out[row_id] = f"≈ {_round_measure(amount)} {unit} ({label})"
+        return out
 
     # --------------------------------------------------------------- helpers
 
@@ -726,22 +1170,94 @@ def load_card(path: str | Path) -> Card:
     return Card.load(path)
 
 
-def format_weight(value: float | None, unit: str = "g") -> str:
-    """Format a weight for display, trimming meaningless decimals."""
+def format_weight(value: float | None, unit: str = "g",
+                  language: str = _LOCALE_DEFAULT) -> str:
+    """Format a weight for display, trimming meaningless decimals.
+
+    The decimal mark follows the language's convention (comma for es/fr/it/
+    pt, dot for en); no thousands separator is ever added and the amount is
+    never changed. The unit is kept verbatim.
+    """
     if value is None:
         return "—"
     if abs(value - round(value)) < 1e-9:
-        return f"{int(round(value))} {unit}"
-    return f"{value:.1f} {unit}"
+        number = f"{int(round(value))}"
+    else:
+        number = f"{value:.1f}"
+    return f"{localize_decimals(number, language)} {unit}"
 
 
-def format_percent(value: float | None) -> str:
-    """Format a percentage for display, trimming meaningless decimals."""
+def format_quantity(quantity: Any, language: str = _LOCALE_DEFAULT) -> str:
+    """Format a quantity the cook supplied in their own unit.
+
+    The original unit is kept and the convention is named, because a cup in
+    one convention is not a cup in another and a quart is never printed as a
+    gram weight it was never converted into. The decimal mark follows the
+    language's convention; the amount is never changed.
+    """
+    if not isinstance(quantity, dict):
+        return "—"
+    amount = quantity.get("amount")
+    unit = str(quantity.get("unit") or "").strip()
+    if (isinstance(amount, bool) or not isinstance(amount, (int, float))
+            or not math.isfinite(amount) or not unit):
+        return "—"
+    convention = str(quantity.get("convention") or "").strip()
+    # Own units are supplied facts, not gram display estimates. Keep enough
+    # digits to round-trip their numeric value; prefer a compact exact common
+    # fraction when it represents that same value within float precision.
+    from fractions import Fraction
+    fraction = Fraction(amount).limit_denominator(16)
+    if fraction.denominator != 1 and math.isclose(float(fraction), amount, rel_tol=1e-15, abs_tol=0):
+        number = f"{fraction.numerator}/{fraction.denominator}"
+    else:
+        number = str(int(amount)) if amount == int(amount) else str(amount)
+    value = f"{localize_decimals(number, language)} {unit}"
+    if convention:
+        value += f" ({convention})"
+    return value
+
+
+def row_weight_label(row: dict[str, Any], resolved: float | None = None,
+                     language: str = _LOCALE_DEFAULT) -> str:
+    """The weight a row shows in every edition.
+
+    An established mass prints in grams. A row whose mass was never
+    established prints the quantity the cook supplied in their own unit, or
+    an em dash when there is nothing to print. It never prints a mass the
+    card does not have. The decimal mark follows the language's convention.
+    """
+    if resolved is None:
+        weight = row.get("weight_g")
+        resolved = float(weight) if isinstance(weight, (int, float)) else None
+    if resolved is not None:
+        return format_weight(resolved, language=language)
+    quantity = row.get("quantity")
+    if isinstance(quantity, dict) and quantity.get("amount") is not None:
+        return format_quantity(quantity, language)
+    return "—"
+
+
+def format_percent(value: float | None,
+                   language: str = _LOCALE_DEFAULT) -> str:
+    """Format a percentage for display, trimming meaningless decimals.
+
+    The decimal mark follows the language's convention; the amount is never
+    changed.
+    """
     if value is None:
         return "—"
-    if abs(value - round(value)) < 1e-9:
-        return f"{int(round(value))}%"
-    return f"{value:.1f}%"
+    if 0 < abs(value) < 0.1:
+        # A real nonzero percentage must not become zero at display precision.
+        # Decimal from the stored spelling avoids both fixed-place truncation
+        # and scientific notation, without changing any recipe arithmetic.
+        from decimal import Decimal
+        number = format(Decimal(str(value)), "f")
+    elif abs(value - round(value)) < 1e-9:
+        number = f"{int(round(value))}"
+    else:
+        number = f"{value:.1f}"
+    return f"{localize_decimals(number, language)}%"
 
 
 def join_blockers(blockers: Iterable[str]) -> str:
@@ -778,8 +1294,22 @@ __all__ = [
     "applicable_process_controls",
     "declares_not_applicable",
     "format_percent",
+    "format_quantity",
     "format_weight",
     "join_blockers",
     "load_card",
     "na_reason",
+    "row_weight_label",
 ]
+
+
+def input_mass_label(card: Card, language: str = _LOCALE_DEFAULT) -> str:
+    """Display full input only when known; label partial mass separately."""
+    derived = card.derived()
+    if derived.input_complete:
+        return format_weight(card.data.get("input_total_g"), language=language)
+    return (
+        f"{translate('caption.unknown_input', language)}; "
+        f"{translate('caption.known_input_subtotal', language)} "
+        f"{format_weight(derived.known_input_subtotal_g, language=language)}"
+    )

@@ -1,0 +1,120 @@
+{
+  "activation": {"recipe_supplied": true},
+  "dish": "Chicken with garlic cream sauce and sesame crumb",
+  "blocks": [
+    {
+      "id": "B1",
+      "kind": "component",
+      "title": "Creamy garlic emulsion",
+      "aliases": ["sauce", "emulsion"],
+      "is_main": false,
+      "purchased": false,
+      "shared_with": [],
+      "ingredients": [
+        {"name": "chicken stock", "amount": "300 ml"},
+        {"name": "heavy cream", "amount": "180 ml"},
+        {"name": "garlic", "amount": "25 g"},
+        {"name": "unsalted butter", "amount": "150 g"},
+        {"name": "xanthan gum", "amount": "5 g"}
+      ],
+      "steps": [
+        {"text": "Simmer stock, cream and garlic 12 min."},
+        {"text": "Blend."},
+        {"text": "Whisk in the butter cube by cube off the heat."},
+        {"text": "Add xanthan, blend 30 s."},
+        {"text": "Salt to taste."}
+      ],
+      "method_text": [
+        "Simmer stock, cream and garlic 12 min.",
+        "Blend.",
+        "Whisk in the butter cube by cube off the heat.",
+        "Add xanthan, blend 30 s.",
+        "Salt to taste."
+      ],
+      "handling_note": "",
+      "page_notes": [
+        {"ingredient": "garlic", "amount": "30 g"}
+      ],
+      "yield_notes": [
+        "I have no idea what the sauce should yield."
+      ],
+      "forks": [
+        {
+          "text": "Creamy garlic emulsion: cold butter into hot liquid, or a cooked butter base started separately? The two give different sauces and the page does not say which one you make."
+        }
+      ]
+    },
+    {
+      "id": "B2",
+      "kind": "component",
+      "title": "Sesame crumb",
+      "aliases": ["crumb"],
+      "is_main": false,
+      "purchased": false,
+      "shared_with": ["Roast carrots"],
+      "ingredients": [
+        {"name": "panko", "amount": "120 g"},
+        {"name": "toasted sesame", "amount": "40 g"},
+        {"name": "fine salt", "amount": "8 g"},
+        {"name": "neutral oil", "amount": "15 g"}
+      ],
+      "steps": [
+        {"text": "Toast panko and sesame in the oil until dry and golden."},
+        {"text": "Salt."},
+        {"text": "Cool on a tray before the tins."}
+      ],
+      "method_text": [
+        "Toast panko and sesame in the oil until dry and golden.",
+        "Salt.",
+        "Cool on a tray before the tins."
+      ],
+      "handling_note": "",
+      "yield_notes": [
+        "I have not weighed the tins."
+      ],
+      "forks": []
+    },
+    {
+      "id": "B3",
+      "kind": "component",
+      "title": "Purchased roast chicken",
+      "aliases": ["chicken"],
+      "is_main": true,
+      "purchased": true,
+      "shared_with": [],
+      "ingredients": [
+        {"name": "purchased roast chicken breast", "amount": "180 g"}
+      ],
+      "steps": [
+        {"text": "Slice and warm through."}
+      ],
+      "method_text": [
+        "Slice and warm through."
+      ],
+      "handling_note": "12 min at 60 C to reach 63 C core; hold at 60 C and use within 2 hours.",
+      "forks": []
+    }
+  ],
+  "chef_notes": [
+    "Standardize the whole page for the dinner service.",
+    "Use my quantities, don't change them.",
+    "I have no idea what the sauce should yield and I have not weighed the tins, so leave the yield off if you cannot measure it.",
+    "Make me the card."
+  ],
+  "corrections": [],
+  "declined": [],
+  "answered": [],
+  "research_sources": [
+    {
+      "url": "https://example.invalid/technique/cream-emulsion-cold-butter",
+      "title": "Synthetic comparable: cold-butter cream emulsion",
+      "taken": "whisk the cold butter off the heat, one cube at a time, until the sauce turns glossy and holds a light trace"
+    },
+    {
+      "url": "https://example.invalid/technique/crumb-toast",
+      "title": "Synthetic comparable: dry crumb toast",
+      "taken": "toast dry, not coloured, until the crumbs stop giving off moisture; cool before tins"
+    }
+  ],
+  "requests": {"card": true, "filing": false}
+}

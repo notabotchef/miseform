@@ -13,8 +13,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      # The suite verifies the PDF text layer and recalculates the workbook in
+      # native Calc. Both need host binaries the runner image does not carry:
+      # pdftotext (poppler-utils) and soffice (libreoffice-calc). Without them
+      # the release-critical readback checks cannot run and the suite fails.
+      - name: Install PDF text and native Calc tooling
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils libreoffice-calc
       - run: python -m pip install -r requirements.txt 'pypdf>=4,<7' 'formulas>=1.3,<2'
       - run: python -m playwright install --with-deps chromium
       - run: python scripts/capability_check.py
-      - run: python -m pytest tests/ -q
+      # -rs prints a line per skipped test, so the guard below can tell a
+      # genuinely green suite from one that skipped the release-critical
+      # native Calc regressions because its tooling went missing.
+      - name: Run the suite
+        run: python -m pytest tests/ -q -rs | tee pytest-report.txt
+      - name: Assert the native Calc regressions actually ran
+        run: |
+          if grep -qiE '^SKIPPED.*native calc' pytest-report.txt; then
+            echo "::error::native Calc regressions were skipped, not run"
+            grep -iE '^SKIPPED.*native calc' pytest-report.txt
+            exit 1
+          fi
       - run: python scripts/release_package.py --outdir '${{ runner.temp }}/miseform-release'

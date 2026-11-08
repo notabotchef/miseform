@@ -1,0 +1,106 @@
+{
+  "title": "AUBERGINE FUMÉE AVEC FILET DE TAHINI ET FLEUR DE SEL",
+  "intro": "Un composant végétal fumé terminé par un filet de tahini émulsionné à froid. L'aubergine est fumée entière, puis pelée et parée avant d'être pesée, de sorte que les grammes de la fiche sont la masse comestible qui atteint l'assiette, non la masse brute. Le filet se fige et se détend lorsqu'on le remue ; l'endroit se juge à la texture, pas au temps.",
+  "allergens": "Sésame (tahini). La révision d'étiquetage simulée ne déclare aucun allergène supplémentaire. Les ustensiles partagés nécessitent des contrôles de contact croisé de la maison ; aucune revendication sans allergène.",
+  "library_name": "Cuisine de démonstration",
+  "stage.0.name": "FUMAGE",
+  "stage.2.name": "FINITION ET PORTION",
+  "components": [
+    {
+      "name": "Pour l'aubergine fumée",
+      "ingredients": [
+        {
+          "row_id": "E1",
+          "name": "Aubergine japonaise, fumée aux copeaux de hickory, pelée et coupée en longueurs de 6 cm"
+        },
+        {
+          "row_id": "E2",
+          "name": "Huile de pépins de raisin (grapeseed) badigeonnée sur le gril avant le fumage"
+        }
+      ]
+    },
+    {
+      "name": "Pour le filet de tahini",
+      "ingredients": [
+        {
+          "row_id": "T1",
+          "name": "Tahini non décortiqué, remué jusqu'à consistance liquide"
+        },
+        {
+          "row_id": "T2",
+          "name": "Jus de citron"
+        },
+        {
+          "row_id": "T3",
+          "name": "Eau froide"
+        }
+      ]
+    },
+    {
+      "name": "Pour la finition",
+      "ingredients": [
+        {
+          "row_id": "F1",
+          "name": "Sel en flocons, style Maldon"
+        },
+        {
+          "row_id": "F2",
+          "name": "Poivre noir concassé grossièrement"
+        }
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "steps": [
+        {
+          "number": 1,
+          "text": "Allumez le fumoir avec des copeaux de hickory et portez-le à environ 105 °C. Disposez les longueurs d'aubergine (E1) sur le gril en une seule couche, en laissant de l'espace entre chaque morceau pour que la fumée atteigne toutes les faces. Badigeonnez le gril d'huile de pépins de raisin (E2) d'abord pour que rien n'attache. Fumez pendant 22 minutes depuis le premier copeau, en retournant l'aubergine une fois à 11 minutes, jusqu'à ce que la peau soit cloquée partout et que la chair cède sous le bout d'une cuillère. Équipement conseillé : fumoir, copeaux de hickory, gril. Point de fin : peau cloquée, chair tendre, aucune résistance crue."
+        },
+        {
+          "number": 2,
+          "text": "Transférez l'aubergine fumée (E1) dans un bol, couvrez-la hermétiquement, et laissez reposer 8 minutes pour que la vapeur détache la peau. Pelez la peau en lanières et jetez-la. Coupez la chair en longueurs de 6 cm, pesez la chair parée sur la balance au 0,1 g, et notez la masse réelle ; ne remplacez jamais un nombre deviné si la parure diffère de la référence."
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "number": 3,
+          "text": "Mettez le tahini (T1) dans un petit bol. Ajoutez le jus de citron (T2) et l'eau froide (T3) en deux additions, en remuant entre chaque. Le mélange va saisir et épaissir avant de se détendre ; continuez de remuer jusqu'à ce qu'il atteigne une consistance liquide qui nappe une cuillère et laisse une trace pendant 3 secondes. La base de tahini est fixée à 90 g, alors n'ajustez qu'avec le jus de citron ou l'eau, jamais avec plus de tahini, et notez tout ajustement dans les notes de l'essai."
+        },
+        {
+          "number": 4,
+          "text": "Goûtez le filet terminé pour l'équilibre. Il doit avoir le goût du tahini et du citron, le sel venant du sel en flocons à la finition, pas du filet. Notez tout point de fin raté pour révision du chef."
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "number": 5,
+          "text": "Disposez les longueurs d'aubergine fumée sur une assiette chaude en une seule couche. Versez le mélange de tahini uniformément sur les surfaces coupées, environ 8,0 g par portion. Saupoudrez le sel en flocons (F1) et le poivre noir concassé (F2) sur le dessus immédiatement avant le service, pour que rien ne reste assez longtemps dans le sel pour en extraire l'humidité."
+        },
+        {
+          "number": 6,
+          "text": "Pesez chaque portion terminée à 8,0 g et notez la masse utilisable par rapport au rendement de référence de 598 g. Toute portion hors de 7,5 g à 8,5 g est re-pesée, non approximée. Notez la masse utilisable réelle et la perte de transfert à chaque essai."
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "heading": "Service et dressage",
+      "text": "Servir chaud dans des assiettes chaudes, en composant, non en plat isolé. Aucune photographie de dressage vérifiée n'est disponible ; les instructions de dressage sont le document de référence."
+    },
+    {
+      "heading": "Conservation et stockage",
+      "text": "Non résolu : conditions approuvées, contenant, étiquetage, date limite de consommation et règle de rejet. Aucune durée de conservation n'est assignée. La production reste bloquée."
+    }
+  ],
+  "facts": {
+    "time_total": "22 minutes",
+    "yield_summary": "598 g utilisables",
+    "yield_portions": "74 portions à 8,0 g"
+  }
+}

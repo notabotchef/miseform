@@ -1,0 +1,106 @@
+{
+  "title": "BERENJENA AHUMADA CON CHORRO DE TAHINI Y FLOR DE SAL",
+  "intro": "Un componente vegetal ahumado terminado con un chorro de tahini emulsionado en frío. La berenjena se ahuma entera, luego se pela y se trima antes de pesarla, por lo que los gramos de la ficha son la masa comestible que llega al plato, no la masa en bruto. El chorro se espesa y se afloja al removerlo; el punto se juzga por la textura, no por el tiempo.",
+  "allergens": "Sésamo (tahini). La revisión de etiquetado simulada no declara alérgenos adicionales. Los utensilios compartidos necesitan controles de contacto cruzado de la casa; ninguna afirmación libre de alérgenos.",
+  "library_name": "Cocina de demostración",
+  "stage.0.name": "AHUMADO",
+  "stage.2.name": "ACABADO Y PORCIÓN",
+  "components": [
+    {
+      "name": "Para la berenjena ahumada",
+      "ingredients": [
+        {
+          "row_id": "E1",
+          "name": "Berenjena japonesa, ahumada con astillas de hickory, pelada y cortada en longitudes de 6 cm"
+        },
+        {
+          "row_id": "E2",
+          "name": "Aceite de pepita de uva (grapeseed) cepillado sobre la parrilla antes de ahumar"
+        }
+      ]
+    },
+    {
+      "name": "Para el chorro de tahini",
+      "ingredients": [
+        {
+          "row_id": "T1",
+          "name": "Tahini sin descascarillar, removido hasta consistencia líquida"
+        },
+        {
+          "row_id": "T2",
+          "name": "Jugo de limón"
+        },
+        {
+          "row_id": "T3",
+          "name": "Agua fría"
+        }
+      ]
+    },
+    {
+      "name": "Para el acabado",
+      "ingredients": [
+        {
+          "row_id": "F1",
+          "name": "Sal en escamas, estilo Maldon"
+        },
+        {
+          "row_id": "F2",
+          "name": "Pimienta negra, quebrada gruesamente"
+        }
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "steps": [
+        {
+          "number": 1,
+          "text": "Enciende el ahumador con astillas de hickory y llévalo a aproximadamente 105 °C. Coloca las largas de berenjena (E1) en la parrilla en una sola capa, dejando espacio entre cada pieza para que el humo alcance todas las caras. Cepilla la parrilla con aceite de pepita de uva (E2) primero para que nada se pegue. Ahúma durante 22 minutos desde el primer astilla, volteando la berenjena una vez a los 11 minutos, hasta que la piel esté ampollada por completo y la carne ceda bajo la punta de una cuchara. Equipo recomendado: ahumador, astillas de hickory, parrilla. Punto de fin: piel ampollada, carne tierna, sin resistencia cruda."
+        },
+        {
+          "number": 2,
+          "text": "Transfiere la berenjena ahumada (E1) a un bol, cúbrelo herméticamente y deja reposar 8 minutos para que el vapor suelte la piel. Pela la piel en tiras y descártala. Corta la carne en longitudes de 6 cm, pesa la carne trimmada en la balanza de 0,1 g, y registra la masa real; nunca sustituyas un número devinado si el trim difiere de la referencia."
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "number": 3,
+          "text": "Pon el tahini (T1) en un bol pequeño. Agrega el jugo de limón (T2) y el agua fría (T3) en dos adiciones, removiendo entre cada una. La mezcla va a espesar y espesarse antes de aflojarse; sigue removiendo hasta que alcance una consistencia líquida que cubra una cuchara y deje un rastro durante 3 segundos. La base de tahini está fijada en 90 g, así que ajusta solo con jugo de limón o agua, nunca con más tahini, y registra cualquier ajuste en las notas de la prueba."
+        },
+        {
+          "number": 4,
+          "text": "Prueba el chorro terminado para el equilibrio. Debe saber a tahini y limón, con la sal proveniente de la sal en escamas al acabado, no del chorro. Registra cualquier punto de fin fallado para revisión del chef."
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "number": 5,
+          "text": "Coloca las largas de berenjena ahumada en un plato caliente en una sola capa. Rocía la mezcla de tahini uniformemente sobre las superficies cortadas, unos 8,0 g por porción. Espolvorea la sal en escamas (F1) y la pimienta negra quebrada (F2) sobre la parte superior inmediatamente antes del servicio, para que nada se quede lo suficiente en la sal como para extraerle humedad."
+        },
+        {
+          "number": 6,
+          "text": "Pesa cada porción terminada a 8,0 g y registra la masa utilizable contra el rendimiento de referencia de 598 g. Cualquier porción fuera de 7,5 g a 8,5 g se re-pesa, no se aproxima. Registra la masa utilizable real y la pérdida de transferencia en cada prueba."
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "heading": "Servicio y emplatado",
+      "text": "Servir caliente en platos calientes, como componente, no como plato independiente. No hay fotografía de emplatado verificada disponible; las instrucciones de emplatado son el registro de referencia."
+    },
+    {
+      "heading": "Conservación y almacenamiento",
+      "text": "Sin resolver: condiciones aprobadas, contenedor, etiquetado, base de fecha de consumo preferente y regla de descarte. No se asigna vida útil. La producción permanece bloqueada."
+    }
+  ],
+  "facts": {
+    "time_total": "22 minutos",
+    "yield_summary": "598 g utilizables",
+    "yield_portions": "74 porciones a 8,0 g"
+  }
+}

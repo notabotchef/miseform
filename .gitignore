@@ -19,5 +19,15 @@ secrets*
 # Local build caches
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.pyc
 .DS_Store
+# Runtime proof and release work belong outside public source
+/work/
+/.theme-parity-scratch/
+/.miseform-backups/
+.miseform-install.json
+SOURCE_MANIFEST.json
+*.zip
+.miseform-runtime.json

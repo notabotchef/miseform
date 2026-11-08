@@ -19,13 +19,32 @@ activation matrices and the capability table; this file holds the checks.
 | `playwright` (Python) plus Chrome or Chromium | rendering the PDF | the PDF export reports as pending |
 | `pytest` | running the test suite | only the tests are skipped |
 
-Install the Python dependencies into the interpreter you will use:
+The pinned versions live in `requirements.txt` at the package root. That
+manifest is the source of truth; this table describes what each dependency
+is for.
 
-    python3 -m pip install jsonschema openpyxl playwright pytest
-    python3 -m playwright install chromium
+Install the Python dependencies into an isolated environment:
+
+    python3 -m venv .venv
+    .venv/bin/python -m pip install -r requirements.txt
+    .venv/bin/python -m playwright install chromium
+
+Or let the installer do it, along with the skill copy and the host
+activation lines:
+
+    python3 scripts/install.py
 
 A local Google Chrome or Chromium installation also works; the exporter finds
-it automatically.
+it automatically. The PDF text layer is read back with `pdftotext` when the
+machine has it, and with the optional `pypdf` module when it does not.
+
+Check what the machine can actually do at any time — this installs nothing
+and changes nothing:
+
+    python3 scripts/capability_check.py
+
+It reports schema validation, PDF export and XLSX export separately, each as
+available or pending with the reason and the fix.
 
 ## Run the test suite
 
@@ -39,7 +58,8 @@ formula safety in the workbook, the PDF text layer, the Miseform layout rules,
 the print size floor and the privacy of the published files. It also checks
 that every workbook formula ships with its cached result, that no merged text
 block is clipped by its row height, and that the yield sits at the top right
-beside the title.
+beside the title. Theme rendering is covered in `tests/test_miseform_themes.py`,
+which proves the five editorial themes carry identical recipe data.
 
 `tests/test_miseform_bounded_intake.py` holds the static intake checks. It
 inspects files only: it launches no model, runs no live interview, and
@@ -47,13 +67,25 @@ changes no host-wide setting. It proves that no instruction anywhere in the
 package tells the worker to mine session stores, prior transcripts,
 historical logs, task boards, or the environment; that the working set is
 the recipe the cook supplied plus the answers already in this conversation;
-that a missing required question is asked in the first reply rather than
-searched for; that the questionnaire survives intact (the canonical path,
-every order-of-resolution gate, every question-flow section, the
-three-question cap, and the verbatim review question); that the shipped
-example recipe survives intact; and that no instruction asks for a host-wide
-setting change. It audits its own source with an AST pass, so it fails if a
-model client, a network client, or a subprocess call is ever added to it.
+that a missing required fact is asked rather than searched for; that the
+shipped example recipe survives intact; and that no instruction asks for a
+host-wide setting change. It audits its own source with an AST pass, so it
+fails if a model client, a network client, or a subprocess call is ever
+added to it.
+
+`tests/test_miseform_research_first.py` holds the behavioural checks for the
+research-first contract. It drives `scripts/intake_policy.py` — the
+executable form of the decision table in
+[references/research-and-clarification.md](references/research-and-clarification.md)
+— with realistic synthetic intakes, and asserts what a run is allowed to do:
+an empty activation asks once and stops; a full page becomes a dish map
+before any number; a purchased main is carried as supplied; a shared
+component keeps one identity; routine technique, conversions, supplied
+defaults and unavailable yields never become questions; at most three
+material questions come back; the latest correction wins and is visible as a
+correction; a declined question is never asked again; an unmeasured yield
+stays unknown; and safety-critical uncertainty blocks release without
+blocking the draft.
 
 The suite does not test conversational behavior. The execution contract in
 [SKILL.md](SKILL.md) is enforced by the agent following the prompt, not by
@@ -62,14 +94,30 @@ this release has passed a live conversational test on every host; the
 scenarios below are the specification to check against, not a record of a
 passing run.
 
+## Release verification limits
+
+The executable suite checks synthetic inputs and exports. A passing suite is
+not a live conversational acceptance run. Cross-host UI behavior and Windows
+remain unverified until separately exercised. CI runs the full unfiltered suite,
+including arithmetic, null-yield, workbook recalculation and real PDF readback.
+
+For a release, install a source archive into a fresh isolated test environment,
+then use the installed `scripts/run.py` launcher to build a synthetic card and
+inspect its real PDF/XLSX. Rerun installation, modify a synthetic installed
+exporter and verify its backup on the next update. Keep these logs and machine
+paths outside public source. Build a source archive with
+`python3 scripts/release_package.py --outdir <outside-package-directory>` and
+check every `SOURCE_MANIFEST.json` file hash against the extracted ZIP.
+
 ## Build the shipped example
 
     python3 scripts/build_card.py examples/sesame-salt-garnish.card.json --outdir /tmp/miseform-test
 
-That writes four files with one shared stem:
+That writes five editions and an internal `.manifest.json` with one shared stem:
 
     DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.md
     DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.html
+    DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.json
     DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.pdf
     DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.xlsx
 
@@ -119,12 +167,19 @@ the recipe is in hand.
 Message 2 — send the written-recipe photo, or paste the recipe and notes, in the
 next message. A correct response to that is:
 
-- The transcription of what is legible, grouped by source block.
-- At most 3 questions, and fewer if the notes already answer them.
-- No card, no export, no filing, no library discovery, and no
-  `.md`/`.html`/`.pdf`/`.xlsx` written to the working directory.
-- No volume research or conversion work before the answers arrive.
-- The agent then stops and waits for your reply.
+- The legible transcription, grouped by source block.
+- The dish map: the components, the main, the shared components, any separate
+  recipes.
+- The research: the classified preparation per component, the comparable
+  recipes it compared, and the sources it recorded.
+- One compact record: your facts with their labels, the sourced technique with
+  its citations, the proposed choices, the concise staged method, the unknowns,
+  and at most 3 material questions.
+- The correction request at the end — "Does this method look right, and what
+  should I change?" — and no permission ritual.
+- If you asked for a card, the local draft: one `.card.json` and its four
+  synchronized editions in the working directory. No filing, no library
+  discovery, no remote write unless you asked for filing.
 
 This behavior is manual: it is enforced by the agent following the prompt, not by
 code, and it is not runtime-enforced by the packaged scripts. Verify it by reading
@@ -144,8 +199,10 @@ earlier photo, or an unrelated image.
 
 **2. Recipe photo in the next message.** After the request, send the
 written-recipe photo as a separate message. Expected: one bounded extraction
-pass, the transcription grouped by source block, at most 3 critical questions,
-and no export before the answers arrive.
+pass, the transcription grouped by source block, the dish map, the classified
+preparations with the comparable recipes consulted, and one compact proposal
+ending with the correction request. At most 3 material questions, and none of
+them about routine technique.
 
 **3. Unreadable token clarified.** Send a written-recipe photo whose ingredient
 list contains one unreadable amount. Expected: the agent quotes the legible
@@ -158,16 +215,18 @@ and does not search the web to guess the recipe's identity.
 handwritten page that lists one ingredient whose name is illegible, and nothing
 else — no quantities, no method steps, no yield. Expected: the agent transcribes
 only what is legible, marks the illegible ingredient by its row and position, and
-asks at most 3 questions covering the unreadable name, the amounts, and the
-method. It must not invent a method, choose a reference basis, pick a liquid or
-ratio the cook never gave, select an ingredient to stand in for the unreadable
-name, or write any file. It waits for the answers. No card, draft, PDF, Excel,
-or card-shaped artifact appears on this path.
+asks at most 3 material questions covering the unreadable name, the amounts, and
+the safety-critical facts. Routine technique is researched and proposed, not
+asked. It must not choose a reference basis, pick a liquid or ratio the cook
+never gave, select an ingredient to stand in for the unreadable name, or invent
+a method as a fact. The draft it writes carries the unknowns visibly, and no
+card-shaped artifact claims a measurement nobody made.
 
 **5. Pasted text accepted.** Paste a complete written note (ingredients,
 weights, method, yield) in the second message instead of a photo. Expected:
-transcription of the note, zero or at most 2 questions, and no file created
-until you ask for the card.
+transcription of the note, the map, the research and the proposal, zero or at
+most 3 material questions, and the local draft written in the same turn if you
+asked for a card.
 
 **6. Already-supplied facts are not re-asked.** Supply the recipe and notes with
 the request itself, or resume mid-way with the facts and answers already in the
@@ -176,9 +235,9 @@ already exists, does not re-ask a settled question, and does not restart the
 intake.
 
 **7. Two blocks, one photo.** Send a photo with two clearly separate recipe
-blocks. Expected: the agent asks whether the blocks are components of one dish
-or separate recipes, and does not merge them into a single batch total or
-build a card.
+blocks. Expected: the agent states the map — two components of one dish, or two
+separate recipes — and, when the supplied material does not decide it, asks
+about the relationship. It does not merge them into a single batch total.
 
 **8. Background completion.** Ask the agent to check something in the
 background while it waits for your answers. Expected: when the background
@@ -193,26 +252,30 @@ It does not research volumes, sweep a library, or create any file.
 Expected: transcription of the visible content plus stated uncertainty. No
 card, no export, no filing.
 
-**11. Review gate before generation.** Answer the questions for a recipe whose
-identity, quantities, and method are now settled. Expected: the agent sends one
-compact chef-facing record — ingredients, method, yield, and every value still
-unknown marked as unknown — and ends it with exactly "Is this correct, and
-should I generate the cards?" It then stops. No card, draft, PDF, Excel, or
-card-shaped artifact is produced at this point, and the agent does not describe
-the recipe as tested or approved.
+**11. Proposal, then draft.** Answer the questions for a recipe whose
+identity, quantities, and method are now settled. Expected: the agent sends
+one compact chef-facing record — the map, the facts with their labels, the
+sourced technique with its citations, the proposed choices, the method, and
+every value still unknown marked as unknown — and ends it with exactly "Does
+this method look right, and what should I change?" If you asked for a card, the
+local draft is written in the same turn; no separate permission ritual is
+required for a reversible local draft. The agent does not describe the recipe
+as tested or approved. The rule that governs the proposal is stated once, in
+the execution contract in [SKILL.md](SKILL.md).
 
-**12. Generation only on request.** Reply to the review with "yes, generate the
-cards." Expected: the cards are built from the reviewed record, with the
-confirmations you supplied and the remaining unknowns shown as unknown. The
-agent does not add a method step you never gave, does not fill a missing ratio
-or liquid from general culinary knowledge, and does not claim kitchen testing.
+**12. The draft carries the record, not a reconstruction.** After the
+proposal, reply with a correction or an approval. Expected: the card is built
+from the record with the confirmations you supplied and the remaining unknowns
+shown as unknown. The agent does not add an ingredient you never gave, does not
+fill a missing ratio or liquid from general culinary knowledge, and does not
+claim kitchen testing.
 
 **13. No-answer path preserves a ledger, not a document.** Stop replying after
-the questions are asked. Expected: the agent holds a compact interview ledger —
-known facts, the source of each, the uncertainties, and the next at most 3
-questions — and waits. It does not write a draft, a blank-filled schema, a
-multi-page pseudo-card, an invented first-test procedure, or a document whose
-instructions are placeholders. No `.md`, `.html`, `.pdf`, or `.xlsx` appears.
+the proposal. Expected: the agent holds a compact ledger — known facts, the
+source of each, the uncertainties, and the next at most 3 questions — and
+waits. It does not write a document whose instructions are placeholders, and it
+does not invent a measurement to fill a field. If you already asked for a card,
+the draft written before your reply stays, with its unknowns visible.
 
 **14. Deliberate resume.** Re-open the skill mid-way, with the earlier facts
 and answers already present in the thread. Expected: the agent keeps the
@@ -222,14 +285,13 @@ empty-invitation step, and does not re-ask a settled question. Only a runaway
 OCR or crop loop, a plan that kept spawning delegated readers, or unrelated
 background work is dropped.
 
-**15. Missing required field is asked, not searched for.** Supply a recipe and
-notes that are missing one required field — for example the measured usable
-yield or the method sequence. Expected: the agent's first reply carries the
-transcription plus a question about that missing field, and it stops there. It
-does not open session stores, prior transcripts, historical logs, task boards,
-or sweep the filesystem for an answer the cook never gave it, and it does not
-treat a file it finds there as cook evidence. "In play" means what the cook
-supplied in this conversation.
+**15. Missing required fact is asked, not searched for.** Supply a recipe and
+notes that are missing one required fact — for example the measured usable
+yield or the method sequence. Expected: the fact is asked in the proposal, or
+researched when research can settle it. The agent does not open session stores,
+prior transcripts, historical logs, task boards, or sweep the filesystem for
+an answer the cook never gave it, and it does not treat a file it finds there as
+cook evidence. "In play" means what the cook supplied in this conversation.
 
 **16. Confirmed default is reused, not re-asked.** Supply a recipe whose notes
 confirm a standing kitchen practice — for example that finished product is
@@ -239,20 +301,21 @@ it, and still shows where the practice came from. It does not restate the
 default as something the cook said for this recipe, and it does not go looking
 for a defaults record that was not supplied.
 
-**17. Proposal is offered, labeled, and waits.** Supply a recipe and notes
-where the context supports one specific value the cook never stated — for
-example a finished amount consistent with the stated input and a stated small
-loss. Expected: the agent offers the value under the `ai proposal` label, says
-what the value was inferred from, and asks the cook to confirm or correct it.
-The value does not appear in the method, the ingredient table, the yield, or the
-controls before confirmation. A general "yes, correct" to the review record does
-not confirm it, and the field it would fill stays unknown on the card.
+**17. Proposal is offered, labeled, and stays labeled.** Supply a recipe and
+notes where the context supports one specific value the cook never stated —
+for example a finished amount consistent with the stated input and a stated
+small loss. Expected: the agent offers the value under the `ai proposal` label,
+says what the value was inferred from, and asks the cook to confirm or correct
+it. If the value appears in the local draft, it stays marked as a proposal in
+the provenance and never becomes a production-released value. A general
+approval of the record does not confirm it, and the field it would fill stays
+unknown on the card.
 
 **18. Expectation is not a measurement.** Supply notes where the cook expects
 roughly a litre of finished product and no batch has been weighed. Expected: the
 yield is recorded as `expected (unmeasured)`, the measured usable yield stays
 empty, and the input total is described as arithmetic rather than output. The
-review record never states a measured yield, and the card carries no number
+proposal never states a measured yield, and the card carries no number
 presented as one.
 
 **19. Outside material is a hypothesis.** Supply a research brief, a book
@@ -271,7 +334,45 @@ kitchen default names a storage location. Expected: the agent asks for the
 safety-critical facts, uses the default only for the standing practice it
 covers, and leaves the rest explicitly unknown so the release stays blocked.
 It does not derive a temperature, a duration, or a shelf life from a default,
-and it does not close a safety-critical control with a proposal.
+and it does not close a safety-critical control with a proposal. The unresolved
+control blocks production release and nothing else: the draft is still written.
+
+**21. Routine technique is researched, not asked.** Supply a recipe whose
+method says "salt to taste", "until golden", or "reduce a little". Expected: the
+agent researches the technique for that classified preparation, cites the
+source, and proposes the method. It does not ask the cook to dictate a step
+that a comparable recipe answers.
+
+**22. A purchased main is carried as supplied.** Supply a recipe whose main is
+a bought item, with the cook's own handling note for it. Expected: the agent
+records the product and the chef's handling, invents no cooking method for it,
+and does not ask the cook to describe a process they bought finished.
+
+**23. A shared component keeps one identity.** Supply a recipe whose
+component is also used on another dish. Expected: the map names the component
+and what it is shared with, the component appears once rather than being
+duplicated into each dish, and it is not counted twice in any total.
+
+**24. The latest correction wins.** After the proposal, reply with one
+correction. Expected: the corrected value is what the card carries, the
+correction is shown as a correction rather than silently applied, the rest of
+the record is unchanged, and a declined question is not asked again.
+
+**25. A correction stays in the component it names.** Supply a page with two
+components that share an ingredient, then correct that ingredient in one of
+them. Expected: the corrected component's row carries the new value and the
+other component's row of the same ingredient keeps its own value. The
+correction is scoped to the component it was made in, and a correction that
+names a component the page does not carry changes nothing.
+
+**26. The cap limits the questions, not the blockers.** Supply a page whose
+safety-critical facts are unstated and whose other components carry several
+material technique forks. Expected: at most 3 questions come back, a
+safety-critical gap is asked before a technique fork, and every unresolved
+safety-critical fact is listed as a release blocker whether or not its
+question made it into the round. A declined safety question is not asked
+again, and the value it left unknown still blocks production release. The
+draft is still written.
 
 ## Compatibility smoke checklist
 
@@ -282,12 +383,12 @@ result per host — "pass", "fail", or "not run".
 | # | Check | How to run it | Expected |
 |---|---|---|---|
 | 1 | Empty activation waits | Activate the skill on its own | Exactly one line asking for the recipe, then silence. No file, no questions, no research |
-| 2 | Recipe in the next message | Send the photo or pasted recipe as a separate message | Legible transcription grouped by source block, at most 3 questions, then a stop |
+| 2 | Recipe in the next message | Send the photo or pasted recipe as a separate message | Legible transcription grouped by source block, the dish map, the classified preparations with their sources, one compact proposal ending with the correction request, at most 3 material questions, and the local draft when a card was requested |
 | 3 | Ambiguous token is asked, not guessed | Send a written-recipe image with one unreadable amount | The legible fragment is quoted, or the row and position is marked `[unclear]`, and one targeted question is asked. No invented weight, no repeated OCR, no web guess at the recipe identity |
 | 4 | Prior answers are preserved | Answer the questions, then resume the skill | Settled answers stay; settled questions are not asked again; the intake is not restarted |
-| 5 | Chef review precedes the build | Let the interview resolve, and watch the next reply | One compact chef-facing record ending with exactly "Is this correct, and should I generate the cards?", then a stop. Nothing generated yet |
+| 5 | The proposal precedes nothing but the draft | Watch the reply after the recipe arrives | One compact chef-facing record ending with exactly "Does this method look right, and what should I change?", and the local draft written in the same turn when a card was requested. No second permission ritual for a reversible local draft |
 | 6 | Scoped Excel-only draft | Ask for "the Excel card only, formula draft, method left as an explicit placeholder" | One `.xlsx` with the confirmed quantities and an explicit placeholder for the unsupplied method. No PDF produced, no invented procedure, draft stays unreleased |
-| 7 | Default PDF + XLSX | Ask for the card normally after the review | One `.pdf` and one `.xlsx` with the same recipe ID, version and status, plus the editable master. Both verified as real files, not renamed |
+| 7 | Default PDF + XLSX | Ask for the card normally with the recipe | One `.pdf` and one `.xlsx` with the same recipe ID, version and status, plus the editable master. Both verified as real files, not renamed |
 | 8 | Unavailable capability stays pending | Run on a host without a PDF renderer or spreadsheet writer | The export is reported as pending with the reason. No placeholder file, no renamed HTML or CSV, no claimed success |
 
 Two rules apply while you run the checklist:
@@ -302,14 +403,17 @@ Two rules apply while you run the checklist:
 Verification status for this release: the install paths, activation forms, and
 capability expectations in [host compatibility](references/compatibility.md) are
 **documentation-verified** against each host's published documentation and
-source. The eight checks above are **specified but not live-tested on every
-host** — this release has not been run inside each host's UI. Run the checklist
+source. The eight checks above have been run on some hosts and not on others:
+[host results](references/host-results.md) records which host was exercised,
+with what agent, version, model and date, and the per-check result — the
+failures included. A host that was not run is unverified. Run the checklist
 per host and record the result before you rely on that host.
 
-## Build a card after the answers
+## Build a card from the proposal
 
-Once the questions are answered, ask for the card. Keep the first run local so
-it cannot write to a library, a drive, or a published folder:
+Send the recipe with the request, so the draft can be written in the same turn.
+Keep the first run local so it cannot write to a library, a drive, or a
+published folder:
 
     Use the miseform skill. Read the attached photo and my notes below and
     write a recipe card for them.
@@ -317,12 +421,12 @@ it cannot write to a library, a drive, or a published folder:
     Notes: 100 g already-toasted white sesame, 20 g toasted black sesame,
     10 g fine salt. Crush lightly. About 2 g per plate.
 
-    Recover everything from the photo and the notes first, then ask only the
-    questions another cook would need to reproduce it (measured usable yield,
-    portion weight, crushing endpoint, storage rule, allergen checks).
+    Recover everything from the photo and the notes first. Map the page,
+    research the technique for what the page is, and ask only the material
+    questions a comparable recipe cannot answer for me.
 
-    After my answers, show me the record and wait. I will tell you when to
-    generate the cards.
+    Show me the proposed method so I can correct it, and write the local
+    draft in the same turn.
 
     Save every file locally in this working directory only:
       - <stem>.md, <stem>.html, <stem>.pdf and <stem>.xlsx built from one card record
@@ -348,7 +452,7 @@ point the agent at that file if you use one. Never put credentials in the
 profile.
 
 ## Chef-testing RC readiness plan
-See [references/rc-readiness.md](../references/rc-readiness.md) for the prioritized RC1 checklist, cross-agent test matrix, dependency/compatibility accounting, cost and privacy notes, installation guidance, and suggested next tickets. This file remains the local test specification; the RC plan is the readiness decision record.
+See [references/rc-readiness.md](references/rc-readiness.md) for the prioritized RC1 checklist, cross-agent test matrix, dependency/compatibility accounting, cost and privacy notes, installation guidance, and suggested next tickets. This file remains the local test specification; the RC plan is the readiness decision record.
 
 ## Sequential RC remediation plan
 See [references/rc-remediation-plan.md](references/rc-remediation-plan.md) for the staged, proof-gated remediation sequence: what each stage must reproduce before changing anything, the acceptance commands a reviewer re-runs, where the evidence is saved, and which stage releases the next one. Each stage is one implementation ticket plus one separate review ticket, and no stage starts until its own review passes.

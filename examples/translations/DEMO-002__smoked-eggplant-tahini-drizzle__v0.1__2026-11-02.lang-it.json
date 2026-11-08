@@ -1,0 +1,106 @@
+{
+  "title": "MELANZANA AFFUMICATA CON FILO DI TAHINI E SALE IN FIOCCO",
+  "intro": "Una componente vegetale affumicata terminata con un filo di tahini emulsionato a freddo. La melanzana viene affumicata intera, poi sbucciata e rifilata prima della pesatura, così i grammi sulla scheda sono la massa commestibile che arriva al piatto, non la massa lorda. Il filo si rapprende e si allenta quando viene mescolato; il punto si giudica dalla consistenza, non dal tempo.",
+  "allergens": "Sesamo (tahini). La revisione simulata dell'etichetta non dichiara allergeni aggiuntivi. Gli utensili condivisi richiedono controlli di contatto incrociato della casa; nessuna rivendicazione senza allergeni.",
+  "library_name": "Cucina dimostrativa",
+  "stage.0.name": "AFFUMICATURA",
+  "stage.2.name": "FINITURA E PORZIONE",
+  "components": [
+    {
+      "name": "Per la melanzana affumicata",
+      "ingredients": [
+        {
+          "row_id": "E1",
+          "name": "Melanzana giapponese, affumicata con scaglie di hickory, sbucciata e tagliata in pezzi di 6 cm"
+        },
+        {
+          "row_id": "E2",
+          "name": "Olio di semi d'uva (grapeseed) spennellato sulla griglia prima dell'affumicatura"
+        }
+      ]
+    },
+    {
+      "name": "Per il filo di tahini",
+      "ingredients": [
+        {
+          "row_id": "T1",
+          "name": "Tahini non decorticato, mescolato fino a consistenza fluida"
+        },
+        {
+          "row_id": "T2",
+          "name": "Succo di limone"
+        },
+        {
+          "row_id": "T3",
+          "name": "Acqua fredda"
+        }
+      ]
+    },
+    {
+      "name": "Per la finitura",
+      "ingredients": [
+        {
+          "row_id": "F1",
+          "name": "Sale in fiocchi, stile Maldon"
+        },
+        {
+          "row_id": "F2",
+          "name": "Pepe nero, macinato grossolanamente"
+        }
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "steps": [
+        {
+          "number": 1,
+          "text": "Accendi l'affumicatore con scaglie di hickory e portalo a circa 105 °C. Disponi i pezzi di melanzana (E1) sulla griglia in un unico strato, lasciando spazio tra ciascuno in modo che il fumo raggiunga ogni lato. Spennella la griglia con olio di semi d'uva (E2) prima, così nulla si attacca. Affuma per 22 minuti dal primo chip, girando la melanzana una volta a 11 minuti, finché la pelle non è vescicata ovunque e la polpa cede sotto la punta di un cucchiaio. Attrezzatura consigliata: affumicatore, scaglie di hickory, griglia. Punto di fine: pelle vescicata, polpa tenera, nessuna resistenza cruda."
+        },
+        {
+          "number": 2,
+          "text": "Trasferisci la melanzana affumicata (E1) in una ciotola, coprila ermeticamente e lascia riposare 8 minuti così il vapore allenta la pelle. Spellala a strisce e scarta la pelle. Taglia la polpa in pezzi di 6 cm, pesa la polpa rifilata sulla bilancia da 0,1 g e registra la massa effettiva; non sostituire mai un numero indovinato se il rifilo differisce dal riferimento."
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "number": 3,
+          "text": "Metti il tahini (T1) in una ciotola piccola. Aggiungi il succo di limone (T2) e l'acqua fredda (T3) in due aggiunte, mescolando tra una e l'altra. Il composto si rapprende e si addensa prima di allentarsi; continua a mescolare finché non raggiunge una consistenza fluida che veli un cucchiaio e lasci una scia per 3 secondi. La base di tahini è fissata a 90 g, quindi regola solo con succo di limone o acqua, mai con più tahini, e registra ogni regolazione nelle note di prova."
+        },
+        {
+          "number": 4,
+          "text": "Assaggia il filo terminato per l'equilibrio. Deve sapere di tahini e limone, con il sale che arriva dal sale in fiocchi alla finitura, non dal filo. Registra ogni punto finale non riuscito per la revisione dello chef."
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "number": 5,
+          "text": "Disponi i pezzi di melanzana affumicata su un piatto caldo in un unico strato. Versa la miscela di tahini uniformemente sulle superfici tagliate, circa 8,0 g per porzione. Cospargi il sale in fiocchi (F1) e il pepe nero macinato grossolanamente (F2) sulla parte superiore immediatamente prima del servizio, così nulla resta abbastanza a lungo nel sale da estrarre umidità."
+        },
+        {
+          "number": 6,
+          "text": "Pesa ogni porzione terminata a 8,0 g e registra la massa utilizzabile rispetto al rendimento di riferimento di 598 g. Qualsiasi porzione al di fuori di 7,5 g a 8,5 g viene ri-pesata, non approssimata. Registra la massa utilizzabile effettiva e la perdita di trasferimento a ogni prova."
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "heading": "Servizio e impiattamento",
+      "text": "Servire caldo su piatti caldi, come componente, non come piatto autonomo. Nessuna foto di impiattamento verificata disponibile; le istruzioni di impiattamento sono il registro di riferimento."
+    },
+    {
+      "heading": "Conservazione e stoccaggio",
+      "text": "Non risolto: condizioni approvate, contenitore, etichetta, base di scadenza e regola di smaltimento. Nessuna shelf life assegnata. La produzione rimane bloccata."
+    }
+  ],
+  "facts": {
+    "time_total": "22 minuti",
+    "yield_summary": "598 g utilizzabili",
+    "yield_portions": "74 porzioni a 8,0 g"
+  }
+}

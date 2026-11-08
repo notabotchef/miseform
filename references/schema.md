@@ -24,9 +24,61 @@ This is the semantic contract for the card. `references/card.schema.json` is its
 | Allergens | Intentional allergens per ingredient and component; label verification evidence; cross-contact controls; unresolved labels; no unsupported free-from claims |
 | Substitutions[] | Approved replacement, ratio, functional changes, method changes, allergen changes, test/approval evidence; otherwise none approved |
 | Components[] | Stable ID, exact version, link, quantity used, status; an assembly cannot be released with unresolved critical component specifications |
-| Provenance[] | Source note/photo/document link and date; evidence kind: chef-stated / chef-confirmed default / calculated / expected (unmeasured) / measured / photo-observed / ai proposal / unknown; conflicts and resolution |
+| Provenance[] | Source note/photo/document link and date; evidence kind: chef-stated / chef-confirmed default / calculated / expected (unmeasured) / measured / sourced technique / photo-observed / ai proposal / unknown; conflicts and resolution |
 | Test/release | Trial date, cook, scale, actual yield, observed endpoints/defects, adjustments, independent cook reproduction, approver and approval date |
 | Filing | Target folder ID, actual saved file ID/URL, version-specific retry key, local path, upload/index/queue/map states; timestamps |
+
+## Process controls
+
+Every card answers all eight processes — sous vide, combi oven, fermentation, pickling, reduction, emulsification, chilling, smoking. An applicable process carries its controlled parameters; an unused one states `N/A — reason`, never a bare `N/A`. The reading editions show only the applicable processes; every key and its reason stay in the card record.
+
+## Ingredient field mapping
+
+The ingredient schema is deliberately narrow. `references/card.schema.json` defines the stored fields below; computed percentages and scaling factors are not stored as extra row properties:
+
+| Promised field | Where it lives |
+|---|---|
+| Stable row ID | stored: `row_id` |
+| component | structural: the row's position under `components[]` |
+| name | stored: `name` |
+| net weight/unit | stored: `weight_g`, in grams; grams are the authority; null when the mass is unknown |
+| optional measured or source-supported volume/unit | stored: `volume` |
+| supplied quantity in the cook's own unit | stored: `quantity`, with the original unit, convention and source text kept beside the metric value |
+| mass stated as a formula | stored: `formula`, naming the basis row it resolves against |
+| original supplied ingredient text | stored: optional `source_excerpt` string or null; verbatim intake evidence for the ledger, separate from printed kitchen notes |
+| volume source record | stored: `volume_source`, carrying the URL, title, access date, the source's own ratio, the unit convention, the state match, proxy status, confidence and the reason when unresolved |
+| brand/specification | rides in `notes` |
+| prep state | rides in `notes` |
+| volume standard | rides in `notes`, together with the source title, URL, access date, ratio, units convention and proxy status |
+| reference scaling % | computed at render from the stored weights; never stored |
+| kitchen notes and supporting specification | the `notes` property on the row; concise preparation guidance for cooks, not the extraction transcript |
+
+The `notes` string remains the documented carrier for every promised field the stored row has no property for, so provenance survives without a new property for each one. The row stays narrow in the way that matters: it stores no computed percentage and no stored scaling factor, and `additionalProperties` stays closed. The structured properties — `quantity`, `formula` and `volume_source` — hold supplied quantities, formula relationships and machine-readable conversion sources. `source_excerpt` holds original supplied text verbatim, including uncertain or handwritten wording, without expanding printed row notes. An evidence-ledger ingredient entry may bind `retained_pointer` to `/components/{index}/ingredients/{index}/source_excerpt`; its `input_excerpt` must occur in both the intake and that retained string. Recipe renderers continue to print brief `notes` and do not print `source_excerpt`. No quantities, densities or interpretations are inferred from this evidence field. Other fields without a dedicated property remain in `notes`.
+
+## Quantity, mass and yield
+
+A row's mass is established in exactly one of three ways, and the card records which:
+
+- the cook stated it: `weight_g` holds the grams;
+- the card states it as a formula against another row: `formula` names the basis row and the percentage or multiple, and the mass is resolved from the card's own rows at validation time;
+- nobody established it: `weight_g` is null and the row stays unresolved. An unknown mass is never replaced by a guessed one, and a quantity the cook gave in their own unit stays that quantity in `quantity`, with the original text kept beside it.
+
+Four different masses are kept apart and never substituted for one another:
+
+| Mass | Where it lives | What it is |
+|---|---|---|
+| Gross purchase mass | `components[].gross_purchase_g` | what was bought, before trimming |
+| Edible mass | each row's `weight_g` | what enters the formula |
+| Input sum | `input_total_g` | the sum of the edible masses |
+| Measured finished yield | `usable_yield_g` | what came out, weighed |
+
+The input sum is arithmetic on the edible masses. It is never the gross purchase, and it is never the finished yield. When any ingredient mass is unresolved, `input_total_g` must be null. The established masses form a separately labeled **known mass subtotal (partial)**; unknown masses are never treated as zero. A numeric full total on an incomplete card is blocked even if it equals that subtotal. When every mass is established, a numeric total must equal their sum. HTML/PDF, Markdown, and Excel distinguish the unknown full input from the known subtotal; loss remains unknown until the full input and usable output are known.
+
+A percentage row scales from the base it was written against, so changing the base or the batch factor changes the percentage row with it. A row whose base mass is unknown stays unknown.
+
+A component that is used by more than one card is linked, not restated: `components[].linked` names the component and the exact version used, the card carries no copy of its formula, and its mass is counted once. A card that restates a linked component's formula, or links the same component twice, is reported.
+
+Percentages are computed from the stored weights — reference percentage = 100 × ingredient mass / named reference mass within the component — and are never stored on the card. The scale factor is computed as target reference mass divided by base reference mass and is offered only under a validated batch range; `batch_factor` on a card records the factor the cook asked for, not a computed percentage.
 
 ## Arithmetic invariants
 
@@ -42,3 +94,44 @@ This is the semantic contract for the card. `references/card.schema.json` is its
 ## Required export fields
 
 PDF and XLSX share the recipe ID/version/date/status and content snapshot. Record file paths, content digest, generation time, validation result and remote filing state for each independently. Both must exist before reporting the default delivery complete. When the cook explicitly requests a narrower scope, report that scope honestly instead: list what was produced, what was deliberately left out, and any export that is pending.
+
+Recipe translation is a rendering overlay, not a second culinary record. See
+`exports.md` for the source-bound sidecar contract and enumerated prose inventory.
+The original canonical Card supplies validation, quantities, formula references,
+control applicability, source evidence and approval state in every language.
+
+## Optional workflow evidence sidecar (version 1)
+
+This sidecar is separate from the canonical recipe schema and does not change
+quantities, percentages, yield arithmetic or release status. Its executable
+contract is `scripts/workflow_completeness.py`; the required dispositions and
+limits are described in [the workflow ledger](research-and-clarification.md#bound-workflow-completeness-ledger).
+
+```json
+{
+  "schema_version": 1,
+  "input_file": "intake.txt",
+  "input_sha256": "SHA256 of exact intake bytes",
+  "card_sha256": "SHA256 of exact source card bytes",
+  "ingredients": [{
+    "pointer": "/components/0/ingredients/0",
+    "input_locator": "page 1, ingredient block, line 1",
+    "input_excerpt": "garlic 2 cloves",
+    "retained_pointer": "/components/0/ingredients/0/notes",
+    "research": {
+      "status": "research_unresolved",
+      "attempts": [{"query": "ingredient-specific conversion lookup", "source": "attempted source", "result": "actual outcome"}],
+      "reason": "Why no useful proposal could be obtained"
+    },
+    "allergens": {"status": "unknown_external", "reason": "Ingredient-specific unresolved label fact"}
+  }],
+  "components": [{
+    "pointer": "/components/0",
+    "timing": {"status": "not_applicable", "reason": "Explain why this component requires no routine preparation timing"}
+  }]
+}
+```
+
+This is a shape example, not evidence for a real recipe. Populate every ingredient
+and component; replace placeholders with actual intake and research records.
+Never manufacture attempt records to satisfy validation.

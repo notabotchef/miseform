@@ -349,3 +349,168 @@ def test_a_long_title_wraps_inside_its_own_columns(tmp_path: Path):
     assert "D2:E2" in merged
     assert sheet["D2"].value == "YIELD"
     assert sheet.row_dimensions[2].height and sheet.row_dimensions[2].height >= 40
+
+
+# ------------------------------------------------------------ base / scaled cache independence
+
+
+def test_batch_scaling_base_total_caches_base_weights_not_scaled(tmp_path: Path) -> None:
+    """Factor 2: the base column total must cache 130 g, the scaled column 260 g."""
+    data = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+    data["batch_factor"] = 2
+    card = Card(data)
+    out = tmp_path / "card.xlsx"
+    result = export_xlsx(card, out)
+    assert result.ok, result.detail
+
+    import openpyxl
+
+    formulas = openpyxl.load_workbook(out)
+    values = openpyxl.load_workbook(out, data_only=True)
+    scaling = formulas["Batch Scaling"]
+
+    total_row = None
+    for row in scaling.iter_rows(min_col=2, max_col=2):
+        if row[0].value == "Total input (g)":
+            total_row = row[0].row
+    assert total_row is not None
+
+    # The total must be guarded on complete mass, never a bare SUM that would
+    # silently drop an unweighed row and report a completed total.
+    formula = scaling[f"C{total_row}"].value
+    assert isinstance(formula, str) and formula.startswith("=IF(") and "ISNUMBER" in formula, (
+        "the base total must be guarded on complete mass"
+    )
+    assert values["Batch Scaling"][f"C{total_row}"].value == pytest.approx(130.0)
+    assert values["Batch Scaling"][f"E{total_row}"].value == pytest.approx(260.0)
+
+    # Real formula evaluation, not only the cached view: complete mass totals
+    # the base weights and scales them at factor 2.
+    import formulas
+
+    xl = formulas.ExcelModel().loads(str(out)).finish()
+    solution = xl.calculate()
+    computed: dict = {}
+    for key, val in solution.items():
+        name = str(key)
+        if "!" not in name:
+            continue
+        cell = name.rsplit("!", 1)[1]
+        sheet_name = name.split("]")[-1].split("'")[0].split("!")[0]
+        try:
+            computed[(sheet_name.upper(), cell)] = val.value[0, 0]
+        except Exception:
+            continue
+    assert computed.get(("BATCH SCALING", f"C{total_row}")) == pytest.approx(130.0)
+    assert computed.get(("BATCH SCALING", f"E{total_row}")) == pytest.approx(260.0)
+
+
+def test_portions_stay_blank_when_usable_yield_is_unknown(tmp_path: Path) -> None:
+    """A null usable yield must stay blank on recalculation, never become 0."""
+    data = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+    data["usable_yield_g"] = None
+    card = Card(data)
+    out = tmp_path / "card.xlsx"
+    export_xlsx(card, out)
+
+    import openpyxl
+
+    formulas = openpyxl.load_workbook(out)
+    values = openpyxl.load_workbook(out, data_only=True)
+    sheet = formulas["Recipe Card"]
+
+    loss_row = portions_row = yield_row = None
+    for row in sheet.iter_rows(min_col=2, max_col=5):
+        for cell in row:
+            if cell.value == "Loss (g)":
+                loss_row = cell.row
+            elif cell.value == "Portion weight (g)":
+                portions_row = cell.row
+            elif cell.value == "Measured usable yield (g)":
+                yield_row = cell.row
+    assert loss_row and portions_row and yield_row
+
+    loss_formula = sheet[f"E{loss_row}"].value
+    portions_formula = sheet[f"E{portions_row}"].value
+    assert isinstance(loss_formula, str) and "ISNUMBER" in loss_formula
+    assert isinstance(portions_formula, str) and "ISNUMBER" in portions_formula and "INT(" in portions_formula
+
+    assert values["Recipe Card"][f"E{loss_row}"].value in (None, "")
+    assert values["Recipe Card"][f"E{portions_row}"].value in (None, "")
+
+    # Real formula evaluation, not only the cached view: blank, never zero.
+    import formulas
+
+    xl = formulas.ExcelModel().loads(str(out)).finish()
+    solution = xl.calculate()
+    computed: dict = {}
+    for key, val in solution.items():
+        name = str(key)
+        if "!" not in name:
+            continue
+        cell = name.rsplit("!", 1)[1]
+        sheet_name = name.split("]")[-1].split("'")[0].split("!")[0]
+        try:
+            computed[(sheet_name.upper(), cell)] = val.value[0, 0]
+        except Exception:
+            continue
+
+    portions_value = computed.get(("RECIPE CARD", f"E{portions_row}"))
+    assert portions_value not in (0, 0.0), "unknown yield must not recalculate to zero portions"
+
+
+def test_incomplete_input_total_is_presented_as_partial(tmp_path: Path) -> None:
+    """One supplied quantity with no established weight: Total input stays explicitly partial."""
+    data = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+    data["input_total_g"] = None
+    second_ing = data["components"][0]["ingredients"][1]
+    second_ing.pop("weight_g", None)
+    second_ing["quantity"] = {"amount": 1, "unit": "tbsp", "convention": "US"}
+    card = Card(data)
+    out = tmp_path / "card.xlsx"
+    result = export_xlsx(card, out)
+    assert result.ok, result.detail
+
+    import openpyxl
+
+    formulas = openpyxl.load_workbook(out)
+    values = openpyxl.load_workbook(out, data_only=True)
+    sheet = formulas["Recipe Card"]
+
+    total_row = loss_row = None
+    for row in sheet.iter_rows(min_col=2, max_col=5):
+        for cell in row:
+            if cell.value == "Total input":
+                total_row = cell.row
+            elif cell.value == "Loss (g)":
+                loss_row = cell.row
+    assert total_row and loss_row
+
+    formula = sheet[f"C{total_row}"].value
+    assert isinstance(formula, str) and formula.startswith("=IF(") and "ISNUMBER" in formula, (
+        "the input total must be guarded on complete mass, not a bare SUM"
+    )
+    cached = values["Recipe Card"][f"C{total_row}"].value
+    assert isinstance(cached, str) and "Partial" in cached and "110 g" not in cached
+    assert values["Recipe Card"][f"E{loss_row}"].value in (None, "")
+
+    # Real formula evaluation, not only the cached view: an incomplete mass
+    # stays explicitly partial on recalculation, never a completed 110 g total.
+    import formulas
+
+    xl = formulas.ExcelModel().loads(str(out)).finish()
+    solution = xl.calculate()
+    computed: dict = {}
+    for key, val in solution.items():
+        name = str(key)
+        if "!" not in name:
+            continue
+        cell = name.rsplit("!", 1)[1]
+        sheet_name = name.split("]")[-1].split("'")[0].split("!")[0]
+        try:
+            computed[(sheet_name.upper(), cell)] = val.value[0, 0]
+        except Exception:
+            continue
+    total_value = computed.get(("RECIPE CARD", f"C{total_row}"))
+    assert isinstance(total_value, str) and "Partial" in total_value, total_value
+    assert "110" not in str(total_value)

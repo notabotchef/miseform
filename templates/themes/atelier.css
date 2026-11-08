@@ -1,0 +1,124 @@
+/* Miseform theme: Atelier — restrained teal editorial edition.
+   Scoped under [data-theme="atelier"]. Teal ink and rules, cool paper tone,
+   composed hierarchy for gallery-ready reading cards. Values are deltas
+   over the base stylesheet. */
+[data-theme="atelier"]{
+  --ink:#1f3a3a;
+  --muted:#4a6b6b;
+  --accent:#2e6e6e;
+  --rule:#b9cfcf;
+  --paper:#f4f8f8;
+  --body-bg:#eef4f4;
+}
+[data-theme="atelier"] .page{
+  max-width:1080px;
+  margin:28px auto;
+  padding:40px 48px 24px;
+}
+[data-theme="atelier"] .masthead{
+  margin-bottom:44px;
+}
+[data-theme="atelier"] .eyebrow{
+  color:var(--accent);
+  letter-spacing:0.16em;
+}
+[data-theme="atelier"] h1{
+  letter-spacing:-0.035em;
+}
+[data-theme="atelier"] .hero{
+  gap:30px;
+}
+[data-theme="atelier"] .intro{
+  font-size:18px;
+  line-height:1.6;
+}
+[data-theme="atelier"] .facts{
+  gap:14px 18px;
+}
+[data-theme="atelier"] .fact dt{
+  color:var(--accent);
+}
+[data-theme="atelier"] .status{
+  border-bottom:1px solid var(--rule);
+  color:var(--ink);
+}
+[data-theme="atelier"] .status strong{
+  color:var(--accent);
+}
+[data-theme="atelier"] .meta{
+  color:var(--muted);
+}
+[data-theme="atelier"] .meta strong{
+  color:var(--ink);
+}
+[data-theme="atelier"] .recipe-body{
+  gap:40px;
+}
+[data-theme="atelier"] h2{
+  color:var(--ink);
+  border-top:1px solid var(--rule);
+}
+[data-theme="atelier"] h3{
+  color:var(--accent);
+}
+[data-theme="atelier"] table{
+  font-size:13px;
+}
+[data-theme="atelier"] th{
+  border-bottom:2px solid var(--ink);
+}
+[data-theme="atelier"] .group th{
+  color:var(--accent);
+  font:italic 13px var(--font-serif);
+}
+[data-theme="atelier"] .caption{
+  font-size:10.5px;
+  line-height:1.75;
+  color:var(--muted);
+}
+[data-theme="atelier"] .step-no{
+  color:var(--accent);
+  font-size:24px;
+}
+[data-theme="atelier"] .steps p{
+  font-size:15.5px;
+  line-height:1.65;
+}
+[data-theme="atelier"] .tip{
+  font-size:10.5px;
+  color:var(--muted);
+}
+[data-theme="atelier"] .notes{
+  gap:28px 48px;
+}
+[data-theme="atelier"] .note h3{
+  color:var(--ink);
+  font-size:10px;
+  letter-spacing:0.12em;
+}
+[data-theme="atelier"] .note p{
+  font-size:14px;
+  line-height:1.7;
+}
+[data-theme="atelier"] .release h2{
+  color:var(--accent);
+}
+[data-theme="atelier"] .release ul{
+  color:var(--muted);
+}
+[data-theme="atelier"] .trace{
+  color:var(--muted);
+  font-size:9.5px;
+}
+[data-theme="atelier"] .footer{
+  color:var(--muted);
+  font-size:8.5px;
+}
+@media print{
+  [data-theme="atelier"] body{background:white}
+  [data-theme="atelier"] .page{margin:0;padding:0;max-width:none;background:white}
+  [data-theme="atelier"] .steps p{line-height:1.15}
+  [data-theme="atelier"] td{padding:0.8mm 2px}
+  [data-theme="atelier"] .caption,.tip{font-size:7pt;line-height:1.4}
+  [data-theme="atelier"] .directions{gap:1mm}
+}

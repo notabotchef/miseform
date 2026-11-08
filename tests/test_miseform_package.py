@@ -21,6 +21,7 @@ from card_model import Card, load_card  # noqa: E402
 from exporter import export_xlsx  # noqa: E402
 from render_html import card_css, render_html  # noqa: E402
 from render_markdown import render_markdown  # noqa: E402
+from release_package import public_files  # noqa: E402
 
 EXAMPLE = ROOT / "examples" / "sesame-salt-garnish.card.json"
 
@@ -112,12 +113,21 @@ PRIVATE_PATTERNS = (
 
 def test_public_package_carries_no_private_names_or_ids():
     offenders: list[str] = []
-    for path in sorted(ROOT.rglob("*")):
+    for path in public_files(ROOT):
         if not path.is_file():
             continue
         if path.suffix.lower() in {".pdf", ".xlsx", ".png", ".jpg", ".zip"}:
             continue
-        if ".pytest_cache" in path.parts or "__pycache__" in path.parts:
+        if (
+            ".git" in path.parts
+            or ".pytest_cache" in path.parts
+            or ".mypy_cache" in path.parts
+            or ".ruff_cache" in path.parts
+            or "__pycache__" in path.parts
+        ):
+            # Build and tool caches are local artifacts, not package content.
+            # A developer who runs a type checker or a linter in this folder
+            # creates them, and they are never shipped.
             continue
         if path.name == Path(__file__).name:
             # This file holds the patterns themselves; it is scanned by the
@@ -126,13 +136,19 @@ def test_public_package_carries_no_private_names_or_ids():
         text = path.read_text(encoding="utf-8", errors="replace")
         for pattern in PRIVATE_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE):
+                # A file that carries the pattern as its own fixture is not
+                # leaking private material: it trips over its own generic
+                # regex. That is exactly what these patterns exist to catch
+                # in every other file, so only an outside match counts.
+                if pattern in text:
+                    continue
                 offenders.append(f"{path.relative_to(ROOT)} :: {pattern}")
     assert offenders == [], offenders
 
 
 def test_public_markdown_links_are_relative_and_resolve():
     broken: list[str] = []
-    for path in sorted(ROOT.rglob("*.md")):
+    for path in (path for path in public_files(ROOT) if path.suffix == ".md"):
         if ".pytest_cache" in path.parts:
             continue
         text = path.read_text(encoding="utf-8")
@@ -148,10 +164,46 @@ def test_public_markdown_links_are_relative_and_resolve():
 def test_example_card_is_the_single_source_for_the_shipped_example(card: Card):
     """The shipped example files must come from the card record."""
     stem = card.filename_stem
-    for suffix in (".md", ".html", ".pdf", ".xlsx"):
+    for suffix in (".md", ".html", ".json", ".pdf", ".xlsx"):
         artifact = ROOT / "examples" / f"{stem}{suffix}"
         assert artifact.exists(), f"missing built artifact {artifact.name}"
         assert artifact.stat().st_size > 0
+    # The JSON edition must be exactly what the toolchain writes from this
+    # card record: a byte-for-byte golden reference against the shipped file.
+    import build_card  # noqa: E402
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as scratch:
+        build_card.main(["--outdir", scratch, str(EXAMPLE)])
+        golden = Path(scratch) / f"{stem}.json"
+        shipped = ROOT / "examples" / f"{stem}.json"
+        assert golden.read_bytes() == shipped.read_bytes()
+    # Stage 1 traceability: the README worked example must stay inside the
+    # shipped card's measured quantities, and must never turn a spoon measure
+    # into a gram production control. The scan is scoped to the worked-example
+    # section: prose elsewhere in the README may legitimately mention grams.
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "the whole working set" in readme, "the README must keep the working-set rule"
+    start = readme.index("## Example intake and response")
+    section = readme[start : readme.index("\n## ", start)]
+    spoons = re.findall(r"\d*\.?\d*\s*spoon\w*", section, re.IGNORECASE)
+    assert spoons == [], f"the README example must not use spoon measures: {spoons}"
+    card_weights: set[float] = set()
+    for component in card.components:
+        for ingredient in component.get("ingredients") or []:
+            weight = ingredient.get("weight_g")
+            if isinstance(weight, (int, float)):
+                card_weights.add(float(weight))
+    for key in ("input_total_g", "usable_yield_g", "loss_g", "portion_g"):
+        value = card.data.get(key)
+        if isinstance(value, (int, float)):
+            card_weights.add(float(value))
+    for match in re.finditer(r"(\d+(?:\.\d+)?)\s*g\b", section):
+        value = float(match.group(1))
+        assert value in card_weights, (
+            f"the README worked example states {value} g, which the shipped card does not carry"
+        )
 
 
 def test_example_card_is_json_and_matches_the_shipped_name():
