@@ -126,7 +126,14 @@ def test_cli_exports_rd_and_returns_nonzero_for_missing_coverage(tmp_path):
     assert run.returncode == 1, run.stderr
     assert 'WORKFLOW' in run.stdout
     assert list(outdir.glob('*.md')) and list(outdir.glob('*.html'))
-    exported = next(p for p in outdir.glob('*.json') if not p.name.endswith('.manifest.json'))
+    # The export directory holds three JSON files: the canonical card record, the
+    # build manifest, and the workflow receipt. Selecting "the json that is not the
+    # manifest" is order-dependent - glob() returns them in filesystem order, so on
+    # Linux the receipt can come first and be picked as if it were the card. Name the
+    # two sidecars explicitly instead.
+    exported = next(p for p in outdir.glob('*.json')
+                    if not p.name.endswith('.manifest.json')
+                    and not p.name.endswith('.workflow-receipt.json'))
     assert json.loads(exported.read_text())['components'][0]['ingredients'][0]['weight_g'] is None
 
 
@@ -190,6 +197,46 @@ def test_cli_records_bound_ledger_and_build_receipt(tmp_path):
     assert receipt['manifest_sha256'] == hashlib.sha256(manifest.read_bytes()).hexdigest()
     assert receipt['workflow_findings'] == []
     assert receipt['release_approval'] is False
+
+
+def test_exported_card_is_found_regardless_of_glob_order(tmp_path):
+    """The canonical card record must be identifiable no matter what order the
+    filesystem returns the export directory's JSON files in.
+
+    The export directory holds three JSON files with the same stem: the card
+    record, the build manifest and the workflow receipt. Any selection that
+    narrows by "not the manifest" alone is order-dependent, and a build whose
+    receipt sorts before the card makes such a selection read the receipt as if
+    it were the card. Name both sidecars explicitly.
+    """
+    paths = fixture(tmp_path)
+    outdir = tmp_path / 'exports'
+    run = subprocess.run([sys.executable, str(ROOT / 'scripts/build_card.py'), str(paths[0]),
+        '--workflow-ledger', str(paths[1]), '--outdir', str(outdir), '--skip-pdf', '--skip-xlsx'],
+        text=True, capture_output=True, check=False)
+    assert 'WORKFLOW' in run.stdout
+
+    jsons = list(outdir.glob('*.json'))
+    assert len(jsons) == 3, 'expected the card, the manifest and the workflow receipt'
+
+    # The card record is the only one of the three that carries the card's own
+    # shape. Whichever order glob() hands them back, exactly one file qualifies.
+    def is_card(path):
+        return ('components' in json.loads(path.read_text())
+                and not path.name.endswith('.manifest.json')
+                and not path.name.endswith('.workflow-receipt.json'))
+
+    cards = [p for p in jsons if is_card(p)]
+    assert len(cards) == 1, f'expected exactly one card record, got {[p.name for p in cards]}'
+    assert json.loads(cards[0].read_text())['components'][0]['ingredients'][0]['weight_g'] is None
+
+    # And the selection must not depend on position: sorting the same directory
+    # differently must not change which file is the card.
+    for ordered in (sorted(jsons), sorted(jsons, reverse=True)):
+        chosen = next(p for p in ordered
+                      if not p.name.endswith('.manifest.json')
+                      and not p.name.endswith('.workflow-receipt.json'))
+        assert chosen == cards[0]
 
 
 @pytest.mark.parametrize('name', ['../outside.txt', 'absolute'])
