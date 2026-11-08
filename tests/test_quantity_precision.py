@@ -1,8 +1,11 @@
 """Own-unit quantities and percentages must survive display formatting."""
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from openpyxl import load_workbook
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,13 +78,39 @@ def test_own_decimal_precision_and_language_are_retained():
     assert format_quantity({'amount': 1 / 4, 'unit': 'cup'}) == '1/4 cup'
 
 
-def test_native_calc_print_and_factor_two_recalculation(tmp_path):
-    import shutil
-    import subprocess
 
+def _find_soffice():
+    """Where LibreOffice's soffice actually is, or None.
+
+    ``shutil.which`` finds the one on PATH, which is the normal case.
+    A bare "soffice" also lives in the usual install locations on Linux and
+    macOS, and those are checked because a headless CI runner often has
+    LibreOffice installed without putting it on PATH.
+
+    There is no fallback to a path under one developer's home directory: a
+    path like that does not exist on any other machine, so a test that
+    depends on it fails everywhere except the machine that wrote it.
+    """
+    found = shutil.which("soffice")
+    if found:
+        return Path(found)
+    for candidate in (
+        "/usr/bin/soffice",
+        "/usr/local/bin/soffice",
+        "/opt/libreoffice/program/soffice",
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+    ):
+        path = Path(candidate)
+        if path.is_file():
+            return path
+    return None
+
+
+def test_native_calc_print_and_factor_two_recalculation(tmp_path):
     from exporter import extract_pdf_text
-    soffice = Path(shutil.which('soffice') or (Path.home() / '.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override/soffice'))
-    assert soffice.is_file(), 'Native Calc required for this release-critical regression'
+    soffice = _find_soffice()
+    if soffice is None:
+        pytest.skip('Native Calc (soffice) is required for this release-critical regression')
     source = tmp_path / 'precision.xlsx'
     assert export_xlsx(precision_card(), source).ok
     run = subprocess.run([str(soffice), '-env:UserInstallation=' + (tmp_path / 'print-profile').as_uri(),
@@ -114,9 +143,6 @@ def test_native_calc_print_and_factor_two_recalculation(tmp_path):
     assert not any(c.value == 'None' for sh in actual for row in sh for c in row)
 
 
-import pytest
-
-
 @pytest.mark.parametrize('language', ['en', 'es', 'fr', 'it', 'pt'])
 def test_tiny_percent_keeps_its_positive_value(language):
     from card_model import format_percent
@@ -137,13 +163,12 @@ def test_scaling_partial_total_reserves_wrapped_warning_height(tmp_path):
 
 
 def test_native_scaling_print_keeps_both_complete_partial_warnings(tmp_path):
-    import shutil
-    import subprocess
-
     from locales import translate
     source = tmp_path / 'partial.xlsx'
     assert export_xlsx(precision_card(), source).ok
-    soffice = Path(shutil.which('soffice') or (Path.home() / '.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override/soffice'))
+    soffice = _find_soffice()
+    if soffice is None:
+        pytest.skip('Native Calc (soffice) is required for this release-critical regression')
     run = subprocess.run([str(soffice), '-env:UserInstallation=' + (tmp_path / 'profile').as_uri(),
         '--headless', '--norestore', '--convert-to', 'pdf:calc_pdf_Export', '--outdir', str(tmp_path), str(source)],
         capture_output=True, text=True, timeout=90, check=False)
