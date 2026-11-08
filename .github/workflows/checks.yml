@@ -13,11 +13,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      # The suite verifies the PDF text layer and recalculates the workbook in
+      # native Calc. Both need host binaries the runner image does not carry:
+      # pdftotext (poppler-utils) and soffice (libreoffice-calc). Without them
+      # the release-critical readback checks cannot run and the suite fails.
+      - name: Install PDF text and native Calc tooling
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils libreoffice-calc
       - run: python -m pip install -r requirements.txt 'pypdf>=4,<7' 'formulas>=1.3,<2'
-      # LibreOffice supplies the native Calc that recalculates the workbook
-      # formulas, and poppler supplies pdftotext for the PDF text layer.
-      # Without them the release-critical Calc regressions cannot run.
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libreoffice-calc poppler-utils
       - run: python -m playwright install --with-deps chromium
       - run: python scripts/capability_check.py
       - run: python -m pytest tests/ -q
