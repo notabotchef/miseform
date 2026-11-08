@@ -598,10 +598,15 @@ def main(argv: list[str] | None = None) -> int:
         if code != 0:
             failures.append("CLI spot check: build_card exited non-zero")
         else:
-            written_paths = list(Path(tmp).glob("*.json"))
+            written_paths = [p for p in Path(tmp).glob("*.json")
+                             if not p.name.endswith(".manifest.json")]
             if not written_paths:
                 failures.append("CLI spot check: no JSON edition was written")
             else:
+                # The export directory holds the canonical card record and the build
+                # manifest, both "*.json". Taking the first path the filesystem
+                # returns would read the manifest - which carries no language or
+                # theme - whenever it sorts first. Name the manifest explicitly.
                 written = json.loads(written_paths[0].read_text(encoding="utf-8"))
                 if written.get("language") != "fr" or written.get("theme") != "atelier":
                     failures.append(
