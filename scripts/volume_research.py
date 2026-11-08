@@ -35,12 +35,15 @@ Public API:
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import json
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
+from urllib.parse import urlsplit
 
 PACKAGE = Path(__file__).resolve().parent.parent
 SOURCES_PATH = PACKAGE / "references" / "volume-sources.example.json"
@@ -235,8 +238,14 @@ class VolumeResult:
 
 
 def load_sources(path: str | Path | None = None) -> list[VolumeSource]:
-    """Load a source catalogue from disk."""
-    target = Path(path) if path else SOURCES_PATH
+    """Load explicitly supplied references; no catalogue means no checked sources.
+
+    The bundled example is synthetic and is only available by passing its path
+    explicitly, for arithmetic fixtures. It is never a production default.
+    """
+    if path is None:
+        return []
+    target = Path(path)
     try:
         raw = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -327,6 +336,31 @@ class SourceCache:
         )
 
 
+def _valid_source_url(url: str) -> bool:
+    try:
+        parsed = urlsplit(str(url))
+        return parsed.scheme.lower() in {"http", "https"} and bool(parsed.hostname)
+    except ValueError:
+        return False
+
+
+def _synthetic_reference(url: str, title: str) -> bool:
+    """Recognize illustrative or unusable references in old records/caches."""
+    if not _valid_source_url(url):
+        return True
+    host = (urlsplit(str(url)).hostname or "").lower().rstrip(".")
+    examples = {"example.com", "example.org", "example.net"}
+    reserved = (host == "localhost" or any(host == domain or host.endswith("." + domain)
+                                         for domain in examples)
+                or host.endswith((".invalid", ".test", ".example", ".localhost"))
+                or host.startswith("example."))
+    return reserved or any(word in str(title).lower() for word in ("synthetic", "fixture"))
+
+
+def _synthetic_source(source: VolumeSource) -> bool:
+    return _synthetic_reference(source.url, source.title)
+
+
 # --------------------------------------------------------------------- ranking
 
 
@@ -386,6 +420,8 @@ def rank_sources(
 
 def _reject_reason(source: VolumeSource, state: str | None, brand: str | None) -> str | None:
     """Why this source may not be used for this ingredient, or None."""
+    if not _valid_source_url(source.url):
+        return "source URL is malformed or is not an HTTP(S) reference"
     if source.measure != "total_mass":
         return (
             f"the source measures {source.measure}, not the ingredient's total weight"
@@ -494,14 +530,21 @@ def research_volume(
             attempts=[],
         )
 
+    catalogue = list(sources) if sources is not None else load_sources()
+    ignored_synthetic_cache = False
+
     # A reference already checked for this ingredient, state and brand is
     # reused instead of researched again.
     if cache is not None:
         cached = cache.get(ingredient, state, brand)
         if cached:
             source = cache.source_from_record(cached)
+            fixture_opt_in = sources is not None and source in catalogue
+            synthetic = (_synthetic_source(source) or bool(cached.get("synthetic"))
+                         or bool(cached.get("test_fixture")))
+            ignored_synthetic_cache = synthetic and not fixture_opt_in
             reason = _reject_reason(source, state, brand)
-            if reason is None:
+            if reason is None and not ignored_synthetic_cache:
                 text, amount, unit, convention = derive_volume(float(grams), source)
                 return VolumeResult(
                     status="derived",
@@ -522,12 +565,14 @@ def research_volume(
                     ],
                 )
 
-    catalogue = list(sources) if sources is not None else load_sources()
-    candidates = rank_sources(catalogue, ingredient, state, brand)
+    # Selection and conflict checks share one candidate budget. A rejected
+    # candidate counts too, and is never checked again as a rival.
+    candidates = rank_sources(catalogue, ingredient, state, brand)[: max(0, max_attempts)]
 
     attempts: list[dict[str, Any]] = []
     accepted: VolumeSource | None = None
-    for source in candidates[: max(1, max_attempts)]:
+    accepted_index = -1
+    for index, source in enumerate(candidates):
         reason = _reject_reason(source, state, brand)
         attempts.append(
             {
@@ -542,6 +587,7 @@ def research_volume(
             # The first accepted source is the highest-ranked one that
             # matched. A later source never replaces it.
             accepted = source
+            accepted_index = index
             break
 
     if accepted is None:
@@ -553,6 +599,10 @@ def research_volume(
         )
         if state:
             reason += f" (state sought: {state})"
+        if ignored_synthetic_cache:
+            reason += "; ignored an illustrative/synthetic cached reference; supply checked sources"
+        elif not catalogue:
+            reason += "; no checked source catalogue supplied"
         rejected_because = [
             str(attempt["reason"]) for attempt in attempts if attempt.get("reason")
         ]
@@ -566,9 +616,7 @@ def research_volume(
     # its density is touched, so a source with no usable convention is
     # rejected with a reason instead of raising on grams_per_ml. A later
     # source never replaces the accepted one.
-    for rival in candidates:
-        if rival is accepted:
-            continue
+    for rival in candidates[accepted_index + 1:]:
         reason = _reject_reason(rival, state, brand)
         if reason is not None:
             attempts.append(
@@ -586,6 +634,15 @@ def research_volume(
         if rival_overlap == 0 or accepted_overlap == 0:
             # The rival does not bear the state the card asked for, so it is
             # not a same-state candidate and cannot open a density conflict.
+            attempts.append(
+                {
+                    "source_title": rival.title,
+                    "source_url": rival.url,
+                    "tier": rival.tier,
+                    "outcome": "excluded",
+                    "reason": "preparation-state overlap is insufficient for a density comparison",
+                }
+            )
             continue
         low, high = sorted((accepted.grams_per_ml, rival.grams_per_ml))
         if high / low > CONFLICT_RATIO:
@@ -611,6 +668,15 @@ def research_volume(
                 ),
                 attempts=attempts,
             )
+        attempts.append(
+            {
+                "source_title": rival.title,
+                "source_url": rival.url,
+                "tier": rival.tier,
+                "outcome": "corroborated",
+                "reason": "same-state density agrees with the accepted source within the conflict threshold",
+            }
+        )
 
     text, amount, unit, convention = derive_volume(float(grams), accepted)
     provenance = accepted.provenance()
@@ -691,10 +757,12 @@ def apply_research(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Research every ingredient that needs a measure and update the card.
 
-    The card is updated in place and the structured research records are
-    returned. An ingredient that already carries a measure keeps it: a
-    measured volume outranks a derived one.
+    An updated copy and the structured research records are returned.
+    Supplied measures retain authority. Derived measures are recomputed from
+    current masses and matching references; unavailable references leave them
+    unresolved rather than retaining a stale value.
     """
+    data = deepcopy(data)
     records: list[dict[str, Any]] = []
     catalogue = list(sources) if sources is not None else load_sources()
     # Resolve every row's mass once before any volume lookup: a stated
@@ -709,8 +777,22 @@ def apply_research(
     for component in data.get("components", []) or []:
         for row in component.get("ingredients", []) or []:
             row_id = str(row.get("row_id", ""))
-            if str(row.get("volume") or "").strip():
+            previous = row.get("volume_source") or {}
+            prior_derived = previous.get("status") == "derived"
+            synthetic_derived = (previous.get("status") == "derived" and
+                                 _synthetic_reference(previous.get("source_url", ""),
+                                                      previous.get("source_title", "")))
+            fixture_opt_in = sources is not None and any(
+                _valid_source_url(source.url) and source.url == previous.get("source_url") and
+                source.title == previous.get("source_title") for source in catalogue)
+            if synthetic_derived and not fixture_opt_in:
+                row["volume"] = None
+                row["notes"] = _append_note(row.get("notes"),
+                    "Previous synthetic/example derived volume withdrawn; old source note is not checked research.")
+            elif str(row.get("volume") or "").strip() and not prior_derived:
                 continue
+            if prior_derived:
+                row["volume"] = None
             result = research_volume(
                 str(row.get("name", "")),
                 resolved.get(row_id),

@@ -318,6 +318,33 @@ def test_filename_stem_is_versioned_and_shared(card: Card):
     assert " " not in stem
 
 
+def test_build_card_writes_the_canonical_json_edition(tmp_path: Path):
+    """The JSON edition is the validated card record, written independently."""
+    import build_card  # noqa: E402
+
+    card = load_card(EXAMPLE)
+    code = build_card.main(["--outdir", str(tmp_path), str(EXAMPLE)])
+    assert code == 0  # the example card is clean and both exports build
+
+    stem = card.filename_stem
+    json_path = tmp_path / f"{stem}.json"
+    assert json_path.exists() and json_path.stat().st_size > 0
+
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    assert data["recipe_id"] == card.recipe_id
+    assert data["version"] == card.version
+    assert data["status"] == card.status
+
+    # The JSON edition stands alone: skipping every other export still leaves it.
+    other = tmp_path / "other"
+    code = build_card.main(
+        ["--outdir", str(other), "--skip-pdf", "--skip-xlsx", str(EXAMPLE)]
+    )
+    assert (other / f"{stem}.json").exists()
+    assert not (other / f"{stem}.pdf").exists()
+    assert not (other / f"{stem}.xlsx").exists()
+
+
 # ------------------------------------------------------- process controls
 
 
@@ -504,7 +531,7 @@ def test_xlsx_uses_formulas_for_percentages_and_scaling(tmp_path: Path, card: Ca
     pct_formulas = [
         c.value for row in sheet.iter_rows(min_col=5, max_col=5) for c in row if isinstance(c.value, str)
     ]
-    assert any(str(v).startswith("=IF(ISNUMBER(") for v in pct_formulas), pct_formulas
+    assert any(str(v).startswith("=IF(AND(ISNUMBER(") for v in pct_formulas), pct_formulas
 
     scaled_formulas = [
         c.value for row in scaling.iter_rows(min_col=5, max_col=5) for c in row if isinstance(c.value, str)

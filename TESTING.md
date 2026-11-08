@@ -58,7 +58,8 @@ formula safety in the workbook, the PDF text layer, the Miseform layout rules,
 the print size floor and the privacy of the published files. It also checks
 that every workbook formula ships with its cached result, that no merged text
 block is clipped by its row height, and that the yield sits at the top right
-beside the title.
+beside the title. Theme rendering is covered in `tests/test_miseform_themes.py`,
+which proves the five editorial themes carry identical recipe data.
 
 `tests/test_miseform_bounded_intake.py` holds the static intake checks. It
 inspects files only: it launches no model, runs no live interview, and
@@ -93,35 +94,30 @@ this release has passed a live conversational test on every host; the
 scenarios below are the specification to check against, not a record of a
 passing run.
 
-## Live runs recorded for this release
+## Release verification limits
 
-| Run | What ran | Result | Artifact |
-|---|---|---|---|
-| 01 | `python3 -m pytest tests/test_miseform_research_first.py -q` | 31 passed | `work/miseform-release-20261101/evidence/01/pytest.txt` |
-| 01 | `python3 -m pytest tests/test_miseform_policy_counterexamples.py -q` | 37 passed | `work/miseform-release-20261101/evidence/01/pytest.txt` |
-| 01 | `python3 -m pytest -q` (full suite) | 253 passed, 1 skipped | `work/miseform-release-20261101/evidence/01/pytest.txt` |
-| 01 | `scripts/intake_policy.py` against the three shipped fixtures | the real decisions, printed in full | `work/miseform-release-20261101/evidence/01/policy_runs.txt` |
-| 01 | the two defects an independent review found, reproduced against the real engine | the fixed behaviour, printed in full | `work/miseform-release-20261101/evidence/01/review-findings.txt` |
-| 01 | AGY `claude-opus-4-6-thinking`, plan mode, review of the contract and engine | findings recorded, gaps fixed, gaps re-probed | `work/miseform-release-20261101/evidence/01/agy-review.txt` |
+The executable suite checks synthetic inputs and exports. A passing suite is
+not a live conversational acceptance run. Cross-host UI behavior and Windows
+remain unverified until separately exercised. CI runs the full unfiltered suite,
+including arithmetic, null-yield, workbook recalculation and real PDF readback.
 
-Two things this release does not claim. No live conversational run on any
-host UI has passed: the fixtures are synthetic and the engine runs against
-them, which checks the decision rules deterministically, not a chef test. And
-the second external review pass, against the fixed code, did not complete —
-the AGY account quota was exhausted mid-run — so the edge cases it named
-were probed executably by the executor instead. The evidence file says so
-in full. The independent review that followed was run by a reviewer, not by
-this package's author, and its two findings are reproduced in
-`review-findings.txt` with the fixed behaviour printed from the real engine.
+For a release, install a source archive into a fresh isolated test environment,
+then use the installed `scripts/run.py` launcher to build a synthetic card and
+inspect its real PDF/XLSX. Rerun installation, modify a synthetic installed
+exporter and verify its backup on the next update. Keep these logs and machine
+paths outside public source. Build a source archive with
+`python3 scripts/release_package.py --outdir <outside-package-directory>` and
+check every `SOURCE_MANIFEST.json` file hash against the extracted ZIP.
 
 ## Build the shipped example
 
     python3 scripts/build_card.py examples/sesame-salt-garnish.card.json --outdir /tmp/miseform-test
 
-That writes four files with one shared stem:
+That writes five editions and an internal `.manifest.json` with one shared stem:
 
     DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.md
     DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.html
+    DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.json
     DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.pdf
     DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.xlsx
 

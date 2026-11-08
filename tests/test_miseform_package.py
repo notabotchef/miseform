@@ -21,6 +21,7 @@ from card_model import Card, load_card  # noqa: E402
 from exporter import export_xlsx  # noqa: E402
 from render_html import card_css, render_html  # noqa: E402
 from render_markdown import render_markdown  # noqa: E402
+from release_package import public_files  # noqa: E402
 
 EXAMPLE = ROOT / "examples" / "sesame-salt-garnish.card.json"
 
@@ -112,7 +113,7 @@ PRIVATE_PATTERNS = (
 
 def test_public_package_carries_no_private_names_or_ids():
     offenders: list[str] = []
-    for path in sorted(ROOT.rglob("*")):
+    for path in public_files(ROOT):
         if not path.is_file():
             continue
         if path.suffix.lower() in {".pdf", ".xlsx", ".png", ".jpg", ".zip"}:
@@ -147,7 +148,7 @@ def test_public_package_carries_no_private_names_or_ids():
 
 def test_public_markdown_links_are_relative_and_resolve():
     broken: list[str] = []
-    for path in sorted(ROOT.rglob("*.md")):
+    for path in (path for path in public_files(ROOT) if path.suffix == ".md"):
         if ".pytest_cache" in path.parts:
             continue
         text = path.read_text(encoding="utf-8")
@@ -163,10 +164,21 @@ def test_public_markdown_links_are_relative_and_resolve():
 def test_example_card_is_the_single_source_for_the_shipped_example(card: Card):
     """The shipped example files must come from the card record."""
     stem = card.filename_stem
-    for suffix in (".md", ".html", ".pdf", ".xlsx"):
+    for suffix in (".md", ".html", ".json", ".pdf", ".xlsx"):
         artifact = ROOT / "examples" / f"{stem}{suffix}"
         assert artifact.exists(), f"missing built artifact {artifact.name}"
         assert artifact.stat().st_size > 0
+    # The JSON edition must be exactly what the toolchain writes from this
+    # card record: a byte-for-byte golden reference against the shipped file.
+    import build_card  # noqa: E402
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as scratch:
+        build_card.main(["--outdir", scratch, str(EXAMPLE)])
+        golden = Path(scratch) / f"{stem}.json"
+        shipped = ROOT / "examples" / f"{stem}.json"
+        assert golden.read_bytes() == shipped.read_bytes()
     # Stage 1 traceability: the README worked example must stay inside the
     # shipped card's measured quantities, and must never turn a spoon measure
     # into a gram production control. The scan is scoped to the worked-example

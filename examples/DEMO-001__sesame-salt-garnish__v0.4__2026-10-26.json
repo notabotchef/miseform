@@ -1,0 +1,186 @@
+{
+  "recipe_id": "DEMO-001",
+  "title": "SESAME SALT GARNISH",
+  "version": "v0.4",
+  "revision_date": "2026-10-26",
+  "status": "R&D",
+  "release_blockers": [
+    "Approved holding and storage conditions, container labeling, use-by basis and discard rule.",
+    "Second-cook reproduction with chef-approved tolerances for yield, crushing endpoint and portioning.",
+    "Explicit production release for this exact final version."
+  ],
+  "recipe_type": "component",
+  "library_name": "Demonstration Kitchen",
+  "intro": "A loose, lightly crushed sesame finish for grilled vegetables. White sesame brings the body; whole black seeds add contrast. Stop crushing while the mixture still falls freely from a spoon.",
+  "facts": {
+    "time_total": "3 minutes",
+    "time_active": "3 min",
+    "time_inactive": "0 min",
+    "difficulty_level": "Basic",
+    "difficulty_technique": "Controlled mortar crushing",
+    "yield_summary": "128 g usable",
+    "yield_portions": "64 portions at 2.0 g",
+    "storage_summary": "Unconfirmed",
+    "storage_reference": "House SOP required"
+  },
+  "equipment": "300 mL mortar and pestle, spoon, dry scraper, dry receiving container; scale readable to 0.1 g. One 130 g input batch only.",
+  "allergens": "Sesame. Simulated label review lists no additional declared allergens. Shared utensils need house cross-contact controls; no free-from claim.",
+  "percentage_basis": {
+    "basis_label": "Ready-to-use roasted white sesame = 100% = 100 g.",
+    "reference_row_id": "I1",
+    "reference_weight_g": 100
+  },
+  "process_controls": {
+    "sous_vide": "N/A - no heat step; the seeds are purchased pre-roasted",
+    "combi": "N/A - no oven or combi step",
+    "fermentation": "N/A - no culture or starter is used",
+    "pickling": "N/A - no acid or brine",
+    "reduction": "N/A - no evaporation step",
+    "emulsification": "N/A - no emulsion is formed",
+    "chilling": "N/A - no chilling step; the garnish is used at room temperature",
+    "smoking": "N/A - no smoke exposure"
+  },
+  "labeling": {
+    "product_name": "Sesame salt garnish",
+    "batch_or_date_code": "NEEDS CHEF CONFIRMATION - date code convention is not set",
+    "use_by_basis": "NEEDS CHEF CONFIRMATION - no approved shelf-life basis located",
+    "storage_instruction": "NEEDS CHEF CONFIRMATION - approved storage conditions and container are unresolved",
+    "allergen_declaration": "Sesame",
+    "preparer_or_station": "NEEDS CHEF CONFIRMATION - preparer and station are not recorded"
+  },
+  "components": [
+    {
+      "name": "For the garnish",
+      "reference_row_id": "I1",
+      "reference_weight_g": 100,
+      "ingredients": [
+        {
+          "row_id": "I1",
+          "name": "Purchased roasted white sesame",
+          "weight_g": 100,
+          "volume": "≈ 11.3 tbsp (US)",
+          "notes": "Ready-to-use; label checked in the fictional trial reply; step 1. Volume is a labeled proxy; weight authoritative."
+        },
+        {
+          "row_id": "I2",
+          "name": "Purchased roasted black sesame",
+          "weight_g": 20,
+          "volume": "≈ 2.25 tbsp (US)",
+          "notes": "Ready-to-use; step 3. Volume is a labeled proxy; weight authoritative."
+        },
+        {
+          "row_id": "I3",
+          "name": "Fine salt",
+          "weight_g": 10,
+          "volume": "≈ 1.7 tsp (US)",
+          "notes": "Step 3. Volume is a labeled proxy; weigh the salt; weight authoritative."
+        }
+      ]
+    }
+  ],
+  "input_total_g": 130,
+  "usable_yield_g": 128,
+  "loss_g": 2,
+  "portion_g": 2,
+  "portions": 64,
+  "stages": [
+    {
+      "name": "CRUSH",
+      "tip": "Roughly half the seeds should split. The mixture must stay loose, with no oily paste.",
+      "steps": [
+        {
+          "number": 1,
+          "text": "Weigh white sesame (I1) into the 300 mL mortar. Use 10 press-and-turn strokes, approximately 30 seconds from the first stroke.",
+          "ingredient_refs": [
+            "I1"
+          ]
+        },
+        {
+          "number": 2,
+          "text": "Check the texture: roughly half the seeds should split. The mixture must remain loose, with no oily paste.",
+          "ingredient_refs": [
+            "I1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MIX",
+      "steps": [
+        {
+          "number": 3,
+          "text": "Add black sesame (I2) and salt (I3). Stir with a spoon for 20 turns, approximately 20 seconds from the first turn. Total mortar load: 130 g.",
+          "ingredient_refs": [
+            "I2",
+            "I3"
+          ],
+          "settings": {
+            "speed_rpm": "spoon stirring, 20 turns"
+          }
+        },
+        {
+          "number": 4,
+          "text": "Check that black seeds are distributed through the mixture and no salt pockets remain. Log any failed endpoint for trial review.",
+          "ingredient_refs": [
+            "I2",
+            "I3"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WEIGH & PORTION",
+      "tip": "Three minutes total active preparation. Do not force actual yield to match the reference result.",
+      "steps": [
+        {
+          "number": 5,
+          "text": "Scrape into a tared, dry container. Record actual usable mass and transfer loss. Reference trial: 128 g usable from 130 g input.",
+          "ingredient_refs": []
+        },
+        {
+          "number": 6,
+          "text": "For the simulated plating trial, weigh 2.0 g per plate and sprinkle evenly across the vegetable surface immediately before dispatch. No bowl garnish.",
+          "ingredient_refs": []
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "heading": "Service & plating",
+      "text": "This card standardizes the garnish only. Vegetable quantity, plate dimensions and finished-dish service temperature belong in the linked assembly card, which has not been supplied. No verified plating photograph is available."
+    },
+    {
+      "heading": "Holding & storage",
+      "text": "Unresolved: approved conditions, container, label, use-by and discard rule. No shelf life is assigned. Cooling and reheating are not applicable to this unheated component. Production remains blocked."
+    },
+    {
+      "heading": "Scaling & variations",
+      "text": "At factor 2: 200 g white sesame, 40 g black sesame and 20 g salt. Run two separate reference-size batches; weigh each output. Do not double mortar load or crushing time. Finished yield is not guaranteed. No substitutions are approved."
+    },
+    {
+      "heading": "Controls & corrective action",
+      "text": "Check seed breakage, absence of paste, mixing and output on every trial. Record deviations for chef review. Recheck current supplier labels and house utensil controls. No validated food-safety critical control point is asserted; applicable controls await house SOP review."
+    },
+    {
+      "heading": "Volume research and sources",
+      "text": "Volumes are researched approximations, not measurements; gram weights stay authoritative. Source 1: King Arthur Baking, Ingredient Weight Chart, https://www.kingarthurbaking.com/learn/ingredient-weight-chart, accessed 2026-10-26, listing sesame seeds at 1/2 US cup = 71 g, that is 8.875 g per US tablespoon, with US measures (1 US cup = 236.6 mL, 1 US tbsp = 14.79 mL, 1 US tsp = 4.93 mL). Source 2: USDA FoodData Central SR Legacy 173468, Salt, table, https://fdc.nal.usda.gov/food-details/173468/nutrients, accessed 2026-10-26, listing 1 tsp = 6 g, 1 tbsp = 18 g and 1 cup = 292 g in US measures. Units convention: US tablespoon, teaspoon and cup throughout. An Australian 20 mL tablespoon is not mixed with these figures, and no metric measure is used on this card. Proxy status: rows I1 and I2 use the generic whole-sesame-seed ratio because the purchased brand and roast state were not provided, so both are labeled proxies rather than exact matches; row I3 uses the generic table-salt ratio because the salt type was not provided. Fine and kosher salts are not interchangeable - table salt at 18 g per US tbsp, Morton's kosher at 16 g and Diamond Crystal at 8 g, a spread of about 2.25 times for the same 10 g - so the salt volume is a cross-check only and the 10 g weight remains the production control."
+    },
+    {
+      "heading": "Volume arithmetic and rounding",
+      "text": "I1: 100 g divided by 8.875 g per US tbsp = 11.27 tbsp, shown as approximately 11.3 tbsp, rounded to the nearest 0.1 tbsp. I2: 20 g divided by 8.875 g per US tbsp = 2.25 tbsp, shown as approximately 2.25 tbsp, rounded to the nearest 0.05 tbsp. I3: 10 g divided by 6 g per US tsp = 1.67 tsp, shown as approximately 1.7 tsp, rounded to the nearest 0.1 tsp. Cup equivalents at 142 g per US cup are approximately 0.70 cup for I1 and approximately 0.14 cup for I2. Every volume on this card is a derived approximation: where an exact measure is needed, weigh the ingredient and measure the spoon."
+    }
+  ],
+  "release_checklist": [
+    "Confirm holding/storage, labeling, use-by and discard SOP.",
+    "Complete second-cook reproduction; approve yield, texture and portion tolerances.",
+    "Obtain explicit chef release for the exact final version after controls are resolved."
+  ],
+  "provenance": {
+    "evidence": "Fictional demonstration card. Original fictional notes and chef replies; no actual photo inspected. Ingredient weights, method and usable yield are simulated statements. Percentages, 64 portions and factor-2 quantities are calculations. Household volumes are researched approximations derived from the cited public sources with their access dates, not measured spoonfuls.",
+    "validation": "One simulated batch; no real cook test and no production approval. New trial with no predecessor. Local demonstration only.",
+    "filing": "Local demonstration only. Proposed relative route: R&D / needs-confirmation. No remote write attempted."
+  },
+  "batch_factor": 1,
+  "tested_batch_range": "one 130 g input batch"
+}

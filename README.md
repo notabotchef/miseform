@@ -32,7 +32,7 @@ The stages are defined once, in [the canonical path](references/research-and-cla
 
 Only three things are worth a question: an identity or quantity conflict in what you supplied, a material technique fork your notes do not settle, and safety-critical uncertainty. Routine technique, measurement conversions, and defaults you supplied are settled by the research and the notes, silently. A question is never repeated: if you decline one, the value stays unknown and the run moves on.
 
-**Draft.** When you ask for a card, Miseform writes the local draft in the same turn — one card record and its four synchronized editions, with unknown values left visibly unknown and the draft labelled unreleased. A local draft is reversible, so it needs no second permission step. When you ask for filing, that request is the authorization: Miseform files within the verified destination and does not ask again.
+**Draft.** When you ask for a card, Miseform writes the local draft in the same turn — one card record and its four synchronized editions plus internal build metadata, with unknown values left visibly unknown and the draft labelled unreleased. A local draft is reversible, so it needs no second permission step. When you ask for filing, that request is the authorization: Miseform files within the verified destination and does not ask again.
 
 Safety-critical uncertainty — a thermal endpoint, a cooling or holding rule, a shelf life, an allergen status — blocks production release and is listed as a blocker. The cap of three limits the questions you are asked, not the blockers: an unresolved safety fact blocks release whether or not its question made it into the round. It never blocks unrelated draft work, and it never becomes a placeholder instruction in the method.
 
@@ -59,10 +59,25 @@ writes to your system Python, never asks for `sudo`, and it is safe to run
 again — a second run updates what belongs to Miseform and leaves everything
 else alone.
 
+The installer records its isolated interpreter inside each installed skill.
+Use its launcher for exports and diagnostics, without changing your host's shell
+or system Python (replace `<skill-folder>` with the printed install folder):
+
+```
+python3 <skill-folder>/scripts/run.py build_card.py <card.json> --outdir <output-directory>
+```
+
+Customized installed files, including an older exporter, are copied to
+`.miseform-backups/<original-sha256>/<relative-path>` before update. Private
+profiles and unrelated files remain untouched; compare the backup with the new
+file before reapplying a customization. Rerunning an unchanged install writes
+no source files. Installation copies only the same public file set used by the
+release archive.
+
 After it finishes, check what this machine can do:
 
 ```
-python3 scripts/capability_check.py
+python3 <skill-folder>/scripts/run.py capability_check.py
 ```
 
 It reports three things separately — schema validation, PDF export, and
@@ -112,8 +127,9 @@ Not supported, stated plainly:
   the Chromium build Playwright installs, the PDF export is reported as
   pending. The HTML, Markdown and Excel editions still work.
 - **Filing to a library is optional and needs your own credentials.** The
-  package ships no credentials and no library client. Filing stays pending
-  until you configure `recipe-library.local.json` — see
+  package ships no credentials and no library client. Remote filing stays pending
+  because no authenticated library client ships here. A private profile
+  describes your destination but does not add a remote integration — see
   [Library configuration](#library-configuration).
 - **Miseform does not verify food safety and does not publish.** It
   produces records; it does not approve them, and it does not upload
@@ -156,15 +172,34 @@ The default output for a completed card is a print-ready **PDF** and editable **
 
 Your explicit request overrides that default. If you ask for a formula draft, an ingredient list, or an Excel-only card, Miseform produces exactly that scope — it does not demand procedures you never supplied, and it does not generate a PDF you did not ask for. A placeholder marks an absent value; it never invents one.
 
-The shipped fictional sample is built from one card record and is downloadable as [PDF](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.pdf), [Excel](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.xlsx), [HTML](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.html) or [Markdown](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.md). All four carry the same recipe ID, version and status, and all of them remain visibly unreleased.
+The shipped fictional sample is built from one card record and is downloadable as [PDF](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.pdf), [Excel](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.xlsx), [HTML](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.html) or [Markdown](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.md). The card record itself ships as [canonical JSON](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.json). All five carry the same recipe ID, version and status, and all of them remain visibly unreleased.
 
 ## Preview
 
 Open the [fictional sesame-salt example](examples/DEMO-001__sesame-salt-garnish__v0.4__2026-10-26.html) in a browser, or inspect the [HTML template](templates/recipe-card.html). These files demonstrate the reading edition. The [Markdown template](templates/recipe-card.md) provides portable editable source. No example is a validated production SOP.
 
+## Editorial themes
+
+A card can be rendered in any of five editorial themes without changing the
+recipe data: weights, volumes, scaling %, method steps, status and workbook
+formulas are identical in every theme.
+
+* Miseform Original — approved rust/cream editorial default (the default for records without a theme)
+* Paper — minimal black/white, extra whitespace, single-column reading rhythm
+* Atelier — restrained teal editorial, cool paper tone
+* Service — high-contrast compact kitchen, red alert accent
+* Ledger — precise tabular prep, full table grid and tabular figures
+
+Select a theme with `build_card.py --theme <theme>`, or store `theme` on the
+card record (CLI flag wins, then the card field, then the original default).
+Run `scripts/preview_gallery.py` to render one synthetic card in all five
+themes as HTML, PDF and Excel plus a preview gallery page. Themes are
+presentation only: the card record, its arithmetic and its release semantics
+are shared across every theme.
+
 ## The card record and the toolchain
 
-A card is authored once as JSON that conforms to [card schema](references/card.schema.json). The bundled scripts then produce all four editions from that one record, so the Markdown master, the HTML reading edition, the PDF and the workbook cannot drift apart:
+A card is authored once as JSON that conforms to [card schema](references/card.schema.json). The bundled scripts then produce all four editions from that one record, and the build manifest binds their actual bytes to the complete canonical record:
 
     python3 scripts/build_card.py examples/sesame-salt-garnish.card.json --outdir /tmp/miseform-test
 
@@ -253,3 +288,53 @@ Publish the skill source and synthetic examples only. Keep real recipes, uploade
 The information architecture is inspired by the readable culinary reference format associated with Modernist Cuisine: weighted formulas, percentage bases, useful metadata, and staged methods. Miseform is an independent project, not affiliated with or endorsed by Modernist Cuisine or its publishers. Its templates and sample content are original. The supplied book screenshots, published recipe text, proprietary illustrations, and photographs are not included or licensed for redistribution here.
 
 [MIT](LICENSE) covers this package's original instructions, templates, and example content only. Third-party recipes, images, fonts, and user uploads retain their own rights. Use photographs and recipe material you own or have permission to share.
+
+
+## Languages
+
+Select `--lang en|es|fr|pt|it`, or record `language` in canonical JSON. CLI choice
+wins over the record and host locale. Labels are localized; recipe prose uses a
+matching `<card-stem>.lang-<code>.json` sidecar when supplied, otherwise the
+canonical recipe text. This is not automatic recipe translation. Emitted JSON
+embeds the effective overlay with its language for a portable same-language
+rebuild. Switching languages drops a mismatched overlay. Theme choice uses
+`--theme original|paper|atelier|service|ledger`.
+
+## Update and uninstall
+
+To update, unpack a new source archive or checkout and run the same
+`python3 scripts/install.py` command. It backs up locally modified owned files
+before replacing them, preserves private configuration, and never deletes
+unrelated files. Restore a customization from `.miseform-backups/` only after
+reviewing compatibility with the new exporter.
+
+To uninstall, first copy any private files, customizations or backups you need
+outside the printed installed skill directory, then remove that Miseform
+directory from each host you installed. The isolated environment is normally
+`~/.local/share/miseform/venv`; remove it only if it is dedicated to Miseform.
+Do not remove an explicit or previously active environment shared by other tools.
+No host configuration or credentials need changing.
+
+## Troubleshooting and local release preparation
+
+Run `python3 <skill-folder>/scripts/run.py capability_check.py`. Missing browser,
+schema validator or spreadsheet writer is reported separately with a remedy.
+If the interpreter was moved or deleted, rerun installation. An export command
+can exit 1 while producing valid unreleased draft files; read its blockers and
+pending-export messages. Network failures during dependency/browser setup leave
+an actionable message; rerun after fixing connectivity. Linux browser system
+libraries may require your administrator's package install.
+
+Version is recorded in `VERSION` and skill metadata. From a checkout, run
+`python3 scripts/release_package.py --outdir <outside-package-directory>` to
+create a deterministic source ZIP, complete SHA-256 source manifest and archive
+checksum. An extracted release can check itself with
+`python3 scripts/release_package.py --verify`; any selected-file hash or version
+mismatch returns nonzero. The installer performs this check before changing an
+environment when release metadata is present. Installation records the copied
+file hashes in `.miseform-install.json`; runtime interpreter paths stay in an
+excluded `.miseform-runtime.json`. Only public source, contributor files and synthetic examples enter
+the archive; runtime state, evidence, private paths and duplicate copies are
+excluded. Inspect artifacts before sharing. This command does not publish.
+See [contributing](CONTRIBUTING.md), [changelog](CHANGELOG.md) and
+[recipe/photo permissions](CONTENT_POLICY.md).

@@ -235,6 +235,10 @@
               "properties": {
                 "row_id": {"type": "string", "minLength": 1},
                 "name": {"type": "string", "minLength": 1},
+                "source_excerpt": {
+                  "type": ["string", "null"],
+                  "description": "Original supplied ingredient text retained verbatim for evidence-ledger retained_pointer. Separate from brief kitchen notes; not printed by recipe renderers."
+                },
                 "weight_g": {
                   "type": ["number", "null"],
                   "exclusiveMinimum": 0,
@@ -330,9 +334,9 @@
       }
     },
     "input_total_g": {
-      "type": "number",
+      "type": ["number", "null"],
       "exclusiveMinimum": 0,
-      "description": "Sum of all ingredient weights. Water used in cooking is not finished yield."
+      "description": "Complete sum of all resolved ingredient masses. Null when any mass is unknown; the known-mass subtotal is derived separately. Water used in cooking is not finished yield."
     },
     "usable_yield_g": {
       "type": ["number", "null"],
@@ -432,8 +436,18 @@
       "description": "Default scaling factor offered on the Batch Scaling sheet."
     },
     "tested_batch_range": {
-      "type": ["string", "null"],
-      "description": "Batch range actually tested. Factors outside it need a trial."
+       "type": ["string", "null"],
+       "description": "Batch range actually tested. Factors outside it need a trial."
+    },
+    "theme": {
+       "type": "string",
+       "enum": ["original", "paper", "atelier", "service", "ledger"],
+       "description": "Selected editorial theme for the reading editions. Absent records render as the Miseform Original (rust/cream) default. The theme is a presentation choice: weights, volumes, percentages, method and status are identical in every theme."
+    },
+    "language": {
+       "type": "string",
+       "enum": ["en", "es", "fr", "it", "pt"],
+       "description": "The cook's language for the reading editions. Absent records render in English; the host environment is auto-detected and a CLI preference overrides both. The language is a presentation choice: weights, volumes, percentages, method and status are identical in every language."
     }
   },
   "allOf": [

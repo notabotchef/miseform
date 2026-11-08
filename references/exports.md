@@ -1,6 +1,6 @@
 # Required completion outputs: PDF and Excel
 
-The default for a completed recipe-card workflow is BOTH a real `.pdf` reading/print card and a real `.xlsx` editable Excel card, in addition to the library's existing editable master. HTML/Markdown are sources or companions, not substitutes. Apply this default to final cards and to any deliberately saved draft; preserve R&D/NEEDS CHEF CONFIRMATION warnings in both exports. Export completion and production release are different gates. A deliberately saved draft is one the cook asked for after the review step; the no-answer path produces no draft, no card, and no export at all.
+The default for a completed recipe-card workflow is BOTH a real `.pdf` reading/print card and a real `.xlsx` editable Excel card, in addition to the library's existing editable master. HTML/Markdown are sources or companions, not substitutes. Apply this default to final cards and to any deliberately saved draft; preserve R&D/NEEDS CHEF CONFIRMATION warnings in both exports. Export completion and production release are different gates. When the cook requests a card or standardization, generate the local unreleased draft in the same turn as the proposal, even when chef corrections are pending. No separate review approval is required to save that reversible draft. An empty activation with no recipe input still produces no draft. Production release remains a separate gate.
 
 ## Scope follows the explicit request
 
@@ -47,3 +47,65 @@ A missing capability is never worked around by renaming, by substituting another
 ## Final receipt
 
 Return PDF and Excel links plus recipe/version/status. State whether filing and indexing are verified or pending for each file. A finished draft may be fully exported while remaining unreleased for kitchen production.
+
+
+## Build integrity and filing
+
+`build_card.py` emits internal `<stem>.manifest.json` metadata alongside requested
+editions. It binds the complete canonical JSON record digest, effective language,
+theme and paper settings, effective translation overlay and digest, requested
+edition list, and SHA-256 bytes of every produced edition including JSON.
+Failed requested exports remain unbound; files left by previous builds do not
+become valid replacements. Skipped PDF/XLSX editions are not required for filing.
+
+File the emitted canonical JSON when CLI language/theme overrides or translation
+sidecars are used. This record embeds the effective translation overlay, so copying
+and rebuilding the canonical JSON preserves translated recipe content for the same language. The embedded overlay
+is tagged with its language and is discarded when another language is selected;
+without a matching sidecar that build falls back to canonical recipe text. An existing
+sidecar at the current record location takes precedence on rebuild; changes
+require a new build and manifest.
+
+Filing validates the manifest and source bytes before staging, then checks staged
+bytes against build hashes and performs format readbacks. Every retry repeats
+source verification; a missing staged file is recovered only from a verified
+build source. Missing manifests, changed records, mixed or altered editions, and
+changed available translation sidecars fail recoverably. Rebuild exports to retry.
+The manifest is local accidental-staleness integrity, not cryptographic
+attestation against someone replacing both metadata and artifacts. It is internal
+metadata, not an extra chef deliverable. Remote filing remains pending.
+
+### Source-bound recipe translation overlays
+
+Sidecars may use the strict contract `schema_version: 1`, `language`,
+`source_record_digest`, `fields` (canonical dotted prose paths to translated
+strings), and optional `verbatim` (path to a nonempty review reason, instead of
+an entry in `fields`). `scripts/translation.py` supplies `source_digest`,
+`translation_inventory`, `normalize_translation`, and `translation_coverage`.
+The source digest excludes only rendering settings/overlays and binds canonical
+status, quantities, approvals and evidence. Built JSON embeds the effective
+sidecar unchanged for portable rebuilds. Build manifest schema 2 binds and
+recomputes coverage as well as the existing exact artifact/overlay hashes;
+older manifests require a rebuild.
+
+Prose paths cover scalar recipe text, `facts.KEY`,
+`percentage_basis.basis_label`, `components.INDEX.name`,
+`components.INDEX.ingredients.ROW_ID.name`/`.notes`, stage names/tips,
+`stages.INDEX.steps.NUMBER.text`/`.settings.KEY`, controls, prose labeling,
+notes, blocker/checklist descriptions and narrative provenance. Ingredient IDs
+are unique within their component and step numbers within their stage. Numeric
+settings, IDs, raw statuses/source objects, dates, batch codes and preparer or
+station identities are not translatable fields. Control applicability and
+blocker membership always come from the original canonical record before any
+translated display is selected; translated N/A cannot hide an applicable control.
+
+Unknown/protected paths, stale source/language, blank/non-string strict values,
+and obvious changed/dropped numeric, physical-unit, ID, URL or quoted-text tokens
+fail the build before artifacts are written. Decimal punctuation may localize.
+These checks do **not** certify semantic equivalence: negation, uncertainty,
+mandatory wording and approval meaning require independent semantic review.
+Coverage reports exact required, covered, verbatim and missing paths; only a
+complete strict overlay (or the unchanged canonical English baseline) reports
+complete. Legacy partial sidecars remain usable drafts and cannot claim complete
+translation. Legacy scalar/facts/component/stage aliases resolve to the same
+field paths; conflicting or ambiguous aliases fail rather than pick a winner.

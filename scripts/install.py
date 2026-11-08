@@ -40,6 +40,9 @@ Options:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import tempfile
 import os
 import shutil
 import subprocess
@@ -50,7 +53,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PACKAGE = HERE.parent
 DEFAULT_VENV = Path.home() / ".local" / "share" / "miseform" / "venv"
+BACKUP_ROOT = Path.home() / ".local" / "share" / "miseform" / "install-backups"
 MIN_PYTHON = (3, 9)
+
+sys.path.insert(0, str(HERE))
+from release_package import public_files, sha256, verify_source  # noqa: E402
 
 # Where each supported host keeps a skill folder, and how the host is
 # activated once the skill is there.
@@ -166,6 +173,12 @@ def check_source() -> None:
             "cannot be declared.",
             "reinstall or re-download the miseform folder",
         )
+    if (PACKAGE / "SOURCE_MANIFEST.json").exists():
+        try:
+            verify_source(PACKAGE)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise fail(f"release source integrity check failed: {exc}",
+                       "unpack a fresh unchanged archive, or use a reviewed source checkout") from None
 
 
 def check_venv_module() -> None:
@@ -197,16 +210,11 @@ def check_pip(python: Path) -> None:
 
 def check_network(python: Path) -> None:
     """Best-effort reachability check for the package index."""
-    probe = subprocess.run(
-        [str(python), "-m", "pip", "download", "--no-deps", "--dest",
-         str(Path(os.environ.get("TMPDIR", "/tmp")) / "mf-netcheck"),
-         "jsonschema"],
-        capture_output=True,
-        text=True,
-    )
-    shutil.rmtree(
-        Path(os.environ.get("TMPDIR", "/tmp")) / "mf-netcheck", ignore_errors=True
-    )
+    with tempfile.TemporaryDirectory(prefix="miseform-netcheck-") as scratch:
+        probe = subprocess.run(
+            [str(python), "-m", "pip", "download", "--no-deps", "--dest", scratch,
+             "jsonschema"], capture_output=True, text=True,
+        )
     if probe.returncode != 0:
         raise fail(
             "the package index could not be reached, so the dependencies "
@@ -343,29 +351,92 @@ def is_private(relative: Path) -> bool:
     return any(part in PRIVATE_DIRS for part in relative.parts)
 
 
+def backup_directory(destination: Path) -> Path:
+    """Keep preserved files outside every host's recursive skill discovery."""
+    root = BACKUP_ROOT.absolute()
+    discovery_roots = [host.parent.resolve() for host in HOSTS.values()]
+    discovery_roots.append((destination.parent if destination.parent.name == "skills"
+                            else destination).resolve())
+    for discovery in discovery_roots:
+        if root.resolve() == discovery or discovery in root.resolve().parents:
+            raise fail("backup directory is inside skill discovery",
+                       "choose a backup directory outside all host skill roots")
+    identity = hashlib.sha256(str(destination.resolve()).encode()).hexdigest()
+    directory = root / identity
+    if any(part.is_symlink() for part in [directory, *directory.parents]):
+        raise fail("symlink backup destination is unsafe", "use a real backup directory")
+    return directory
+
+
+def migrate_legacy_backups(destination: Path, directory: Path) -> None:
+    """Relocate the complete old backup tree without replacing existing data."""
+    legacy = destination / ".miseform-backups"
+    if legacy.is_symlink():
+        raise fail("symlink legacy backup is unsafe", "replace the symlink with a real directory")
+    if not legacy.exists():
+        return
+    if not legacy.is_dir():
+        raise fail("legacy backup path is not a directory", "preserve and relocate it manually")
+    target = directory / "legacy"
+    suffix = 1
+    while target.exists() or target.is_symlink():
+        suffix += 1
+        target = directory / f"legacy-{suffix}"
+    directory.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(legacy), str(target))
+    warn(f"preserved legacy backups: {target}")
+
+
 def copy_skill(destination: Path) -> int:
     """Copy the skill into ``destination`` without removing anything.
 
     Only files the package owns are written. Private configuration in the
-    destination is left exactly as it is, and nothing is ever deleted.
+    destination is left exactly as it is. Legacy backup trees are relocated
+    outside skill discovery, with every file retained.
     """
     written = 0
-    for source in sorted(PACKAGE.rglob("*")):
+    inventory_path = destination / ".miseform-install.json"
+    if destination.is_symlink() or inventory_path.is_symlink():
+        raise fail("symlink destination is unsafe", "use a real skill directory")
+    backups = backup_directory(destination)
+    migrate_legacy_backups(destination, backups)
+    try:
+        state = json.loads(inventory_path.read_text()) if inventory_path.exists() else {}
+        previous = state.get("files", {}) if isinstance(state, dict) else {}
+        if not isinstance(previous, dict):
+            previous = {}
+    except (OSError, ValueError):
+        previous = {}
+    inventory = {}
+    for source in public_files(PACKAGE):
         relative = source.relative_to(PACKAGE)
-        if any(part in SKIP_NAMES for part in relative.parts):
-            continue
-        if source.name.endswith(SKIP_SUFFIXES):
-            continue
-        if is_private(relative):
-            continue
         target = destination / relative
-        if source.is_dir():
-            target.mkdir(parents=True, exist_ok=True)
-            continue
+        if any(part.is_symlink() for part in [target, *target.parents] if part != destination.parent):
+            raise fail(f"symlink destination is unsafe: {relative}", "replace the symlink with a real directory or file")
         target.parent.mkdir(parents=True, exist_ok=True)
-        if not target.exists() or target.read_bytes() != source.read_bytes():
+        new_hash = sha256(source)
+        inventory[relative.as_posix()] = new_hash
+        if target.exists() and target.read_bytes() != source.read_bytes():
+            old_hash = sha256(target)
+            if previous.get(relative.as_posix()) != old_hash:
+                backup = backups / old_hash / relative
+                if any(part.is_symlink() for part in [backup, *backup.parents] if part != destination.parent):
+                    raise fail("symlink backup destination is unsafe", "use a real backup directory")
+                if backup.exists() and (not backup.is_file() or sha256(backup) != old_hash):
+                    raise fail("existing backup differs from its content hash",
+                               "preserve and inspect the existing backup before retrying")
+                backup.parent.mkdir(parents=True, exist_ok=True)
+                if not backup.exists():
+                    shutil.copy2(target, backup)
+                warn(f"preserved customized file: {relative} at {backup}")
+        if not target.exists() or sha256(target) != new_hash:
             shutil.copy2(source, target)
             written += 1
+    state = {"version": (PACKAGE / "VERSION").read_text().strip() if (PACKAGE / "VERSION").exists() else "unknown",
+             "files": inventory}
+    serialized = json.dumps(state, indent=2, sort_keys=True) + "\n"
+    if not inventory_path.exists() or inventory_path.read_text() != serialized:
+        inventory_path.write_text(serialized)
     return written
 
 
@@ -406,6 +477,7 @@ def print_environment(python: Path) -> None:
     step("the environment the export scripts run in")
     say(f"    interpreter: {python}")
     say(f"    activate:    source {python.parent.parent}/bin/activate")
+    say("    installed tools: python3 <skill-folder>/scripts/run.py build_card.py CARD.json --outdir DIR")
     say(
         "    Miseform's own scripts are run by your host agent; they need this "
         "environment's packages, so keep it activated in the shell your agent "
@@ -510,6 +582,11 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 destination.mkdir(parents=True, exist_ok=True)
                 written = copy_skill(destination)
+                runtime = destination / ".miseform-runtime.json"
+                if runtime.is_symlink():
+                    raise fail("symlink runtime destination is unsafe", "replace it with a regular file")
+                runtime.write_text(json.dumps({"python": str(python.absolute()),
+                                               "version": (PACKAGE / "VERSION").read_text().strip()}, indent=2) + "\n")
             except OSError as exc:
                 warn(f"the skill folder for {name} could not be written: {exc}")
                 continue

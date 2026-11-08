@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from volume_research import CONVENTION_LABELS, round_measure as _round_measure
+from locales import DEFAULT_LANGUAGE as _LOCALE_DEFAULT, localize_decimals, translate
 
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "references" / "card.schema.json"
 
@@ -100,9 +101,11 @@ def na_reason(value: Any) -> str:
     text = str(value or "").strip()
     if not text.lower().startswith(_NA_PREFIXES):
         return ""
-    if "-" not in text:
+    match = re.fullmatch(r"(?:n/a|na|not applicable)\s*[-–—]\s*(.+)", text, re.IGNORECASE)
+    if match is None:
         return ""
-    return text.split("-", 1)[1].strip()
+    reason = match.group(1).strip()
+    return reason if any(character.isalnum() for character in reason) else ""
 
 
 def applicable_process_controls(controls: dict[str, str]) -> list[tuple[str, str]]:
@@ -182,9 +185,20 @@ class Derived:
     component_percentages: dict[str, dict[str, float]] = field(default_factory=dict)
     component_totals: dict[str, float] = field(default_factory=dict)
     input_total_g: float = 0.0
+    input_complete: bool = True
+    input_structure_complete: bool = True
     loss_g: float | None = None
     portions: int | None = None
     portion_remainder_g: float | None = None
+
+    @property
+    def known_input_subtotal_g(self) -> float:
+        """Established mass only; never a full total unless input_complete.
+
+        input_total_g remains a legacy arithmetic accumulator for callers.
+        Canonical card input_total_g must be null when any mass is unknown.
+        """
+        return self.input_total_g
 
 
 def _jsonschema():
@@ -242,6 +256,17 @@ class Card:
     @property
     def revision_date(self) -> str:
         return str(self.data.get("revision_date", ""))
+
+    @property
+    def language(self) -> str:
+        """The cook's language for the reading editions, or ``""`` unset.
+
+        Stored on the card record so the choice persists across components
+        and assembly; resolved at build time with ``locales.resolve_language``
+        (CLI flag wins, then this field, then the host environment, then
+        English).
+        """
+        return str(self.data.get("language", ""))
 
     @property
     def status(self) -> str:
@@ -482,14 +507,17 @@ class Card:
 
     def _check_input_total(self) -> list[Finding]:
         out: list[Finding] = []
-        resolved = self.resolved_weights()
-        total = 0.0
-        for ing in self.ingredients:
-            weight = resolved.get(str(ing.get("row_id", "")))
-            if isinstance(weight, (int, float)):
-                total += float(weight)
+        derived = self.derived()
+        total = derived.known_input_subtotal_g
 
         declared = self.data.get("input_total_g")
+        if declared is not None and not derived.input_complete:
+            out.append(Finding(
+                "input-total-incomplete",
+                "input_total_g must be null while any ingredient mass is unresolved; "
+                f"known mass subtotal is {total:g} g, not a complete input total",
+                path="input_total_g",
+            ))
         if isinstance(declared, (int, float)):
             if not math.isclose(float(declared), total, abs_tol=GRAM_EPSILON):
                 out.append(
@@ -802,7 +830,13 @@ class Card:
                         path="components",
                     )
                 )
-            if states_provenance and not volume:
+            source = ing.get("volume_source")
+            rejected_source = (
+                isinstance(source, dict)
+                and source.get("status") == "unresolved"
+                and bool(str(source.get("unresolved_reason") or "").strip())
+            )
+            if states_provenance and not volume and not rejected_source:
                 out.append(
                     Finding(
                         "volume-source-record-without-volume",
@@ -999,25 +1033,41 @@ class Card:
         derived = Derived()
         resolved = self.resolved_weights()
 
+        seen_links: set[tuple[str, str]] = set()
         for comp in self.components:
             comp_name = str(comp.get("name", ""))
-            ref_weight = comp.get("reference_weight_g")
-            if not isinstance(ref_weight, (int, float)) or float(ref_weight) <= 0:
+            link = comp.get("linked")
+            if isinstance(link, dict):
+                key = (str(link.get("component_id", "")), str(link.get("version", "")))
+                if comp.get("ingredients") or key in seen_links:
+                    derived.input_complete = False
+                    derived.input_structure_complete = False
+                if key in seen_links:
+                    continue
+                seen_links.add(key)
+                weight = link.get("quantity_g")
+                if isinstance(weight, (int, float)) and not isinstance(weight, bool) and math.isfinite(weight) and weight > 0:
+                    derived.component_totals[comp_name] = float(weight)
+                    derived.input_total_g += float(weight)
+                else:
+                    derived.input_complete = False
                 continue
-
+            ref_weight = comp.get("reference_weight_g")
+            has_reference = isinstance(ref_weight, (int, float)) and ref_weight > 0
             per_component: dict[str, float] = {}
             component_total = 0.0
             for ing in comp.get("ingredients", []) or []:
                 row_id = str(ing.get("row_id", ""))
                 weight = resolved.get(row_id)
                 if not isinstance(weight, (int, float)):
+                    derived.input_complete = False
                     continue
                 weight = float(weight)
                 component_total += weight
-                pct = 100.0 * weight / float(ref_weight)
-                per_component[row_id] = pct
-                derived.percentages[row_id] = pct
-
+                if has_reference:
+                    pct = 100.0 * weight / float(ref_weight)
+                    per_component[row_id] = pct
+                    derived.percentages[row_id] = pct
             derived.component_percentages[comp_name] = per_component
             derived.component_totals[comp_name] = component_total
             derived.input_total_g += component_total
@@ -1026,7 +1076,7 @@ class Card:
         portion = self.data.get("portion_g")
         input_total = self.data.get("input_total_g")
 
-        if isinstance(usable, (int, float)) and isinstance(input_total, (int, float)):
+        if derived.input_complete and isinstance(usable, (int, float)) and isinstance(input_total, (int, float)):
             derived.loss_g = float(input_total) - float(usable)
         if isinstance(usable, (int, float)) and isinstance(portion, (int, float)):
             derived.portions = int(math.floor(float(usable) / float(portion)))
@@ -1120,61 +1170,94 @@ def load_card(path: str | Path) -> Card:
     return Card.load(path)
 
 
-def format_weight(value: float | None, unit: str = "g") -> str:
-    """Format a weight for display, trimming meaningless decimals."""
+def format_weight(value: float | None, unit: str = "g",
+                  language: str = _LOCALE_DEFAULT) -> str:
+    """Format a weight for display, trimming meaningless decimals.
+
+    The decimal mark follows the language's convention (comma for es/fr/it/
+    pt, dot for en); no thousands separator is ever added and the amount is
+    never changed. The unit is kept verbatim.
+    """
     if value is None:
         return "—"
     if abs(value - round(value)) < 1e-9:
-        return f"{int(round(value))} {unit}"
-    return f"{value:.1f} {unit}"
+        number = f"{int(round(value))}"
+    else:
+        number = f"{value:.1f}"
+    return f"{localize_decimals(number, language)} {unit}"
 
 
-def format_quantity(quantity: Any) -> str:
+def format_quantity(quantity: Any, language: str = _LOCALE_DEFAULT) -> str:
     """Format a quantity the cook supplied in their own unit.
 
     The original unit is kept and the convention is named, because a cup in
     one convention is not a cup in another and a quart is never printed as a
-    gram weight it was never converted into.
+    gram weight it was never converted into. The decimal mark follows the
+    language's convention; the amount is never changed.
     """
     if not isinstance(quantity, dict):
         return "—"
     amount = quantity.get("amount")
     unit = str(quantity.get("unit") or "").strip()
-    if not isinstance(amount, (int, float)) or not unit:
+    if (isinstance(amount, bool) or not isinstance(amount, (int, float))
+            or not math.isfinite(amount) or not unit):
         return "—"
     convention = str(quantity.get("convention") or "").strip()
-    value = f"{amount:g} {unit}"
+    # Own units are supplied facts, not gram display estimates. Keep enough
+    # digits to round-trip their numeric value; prefer a compact exact common
+    # fraction when it represents that same value within float precision.
+    from fractions import Fraction
+    fraction = Fraction(amount).limit_denominator(16)
+    if fraction.denominator != 1 and math.isclose(float(fraction), amount, rel_tol=1e-15, abs_tol=0):
+        number = f"{fraction.numerator}/{fraction.denominator}"
+    else:
+        number = str(int(amount)) if amount == int(amount) else str(amount)
+    value = f"{localize_decimals(number, language)} {unit}"
     if convention:
         value += f" ({convention})"
     return value
 
 
-def row_weight_label(row: dict[str, Any], resolved: float | None = None) -> str:
+def row_weight_label(row: dict[str, Any], resolved: float | None = None,
+                     language: str = _LOCALE_DEFAULT) -> str:
     """The weight a row shows in every edition.
 
     An established mass prints in grams. A row whose mass was never
     established prints the quantity the cook supplied in their own unit, or
     an em dash when there is nothing to print. It never prints a mass the
-    card does not have.
+    card does not have. The decimal mark follows the language's convention.
     """
     if resolved is None:
         weight = row.get("weight_g")
         resolved = float(weight) if isinstance(weight, (int, float)) else None
     if resolved is not None:
-        return format_weight(resolved)
+        return format_weight(resolved, language=language)
     quantity = row.get("quantity")
     if isinstance(quantity, dict) and quantity.get("amount") is not None:
-        return format_quantity(quantity)
+        return format_quantity(quantity, language)
     return "—"
 
 
-def format_percent(value: float | None) -> str:
-    """Format a percentage for display, trimming meaningless decimals."""
+def format_percent(value: float | None,
+                   language: str = _LOCALE_DEFAULT) -> str:
+    """Format a percentage for display, trimming meaningless decimals.
+
+    The decimal mark follows the language's convention; the amount is never
+    changed.
+    """
     if value is None:
         return "—"
-    if abs(value - round(value)) < 1e-9:
-        return f"{int(round(value))}%"
-    return f"{value:.1f}%"
+    if 0 < abs(value) < 0.1:
+        # A real nonzero percentage must not become zero at display precision.
+        # Decimal from the stored spelling avoids both fixed-place truncation
+        # and scientific notation, without changing any recipe arithmetic.
+        from decimal import Decimal
+        number = format(Decimal(str(value)), "f")
+    elif abs(value - round(value)) < 1e-9:
+        number = f"{int(round(value))}"
+    else:
+        number = f"{value:.1f}"
+    return f"{localize_decimals(number, language)}%"
 
 
 def join_blockers(blockers: Iterable[str]) -> str:
@@ -1218,3 +1301,15 @@ __all__ = [
     "na_reason",
     "row_weight_label",
 ]
+
+
+def input_mass_label(card: Card, language: str = _LOCALE_DEFAULT) -> str:
+    """Display full input only when known; label partial mass separately."""
+    derived = card.derived()
+    if derived.input_complete:
+        return format_weight(card.data.get("input_total_g"), language=language)
+    return (
+        f"{translate('caption.unknown_input', language)}; "
+        f"{translate('caption.known_input_subtotal', language)} "
+        f"{format_weight(derived.known_input_subtotal_g, language=language)}"
+    )

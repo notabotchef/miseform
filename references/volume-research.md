@@ -88,9 +88,7 @@ Research is automatic. A routine conversion is never a question for the chef.
 4. **A bounded fallback**, used only when nothing above matched. It is always
    labeled a proxy and carries the lowest confidence.
 
-The bound is two targeted sources per ingredient. After two, the ingredient is
-unresolved with a stated reason. Skipping the research is never acceptable;
-an unresolved result with a reason is.
+The bound is two targeted source attempts per ingredient, within the shared whole-run ceiling of 12 search/fetch attempts or 4 minutes. Failures count. After the limit, record the unresolved reason and continue drafting. A provider's HTTP 429 or authentication failure stops that provider for this run, including alternate endpoints; do not generate bespoke fetch scripts or retry it under another ingredient name. Reuse matching checked references. An ingredient skipped because the shared budget ran out must say so; do not pretend it received an individual search. An unresolved result with an honest reason is valid for an unreleased draft.
 
 ### What disqualifies a source
 
@@ -106,6 +104,56 @@ an unresolved result with a reason is.
 - Two credible sources that **disagree materially** are a conflict the cook
   settles. They are never averaged, and the higher-ranked one is not quietly
   published.
+
+## Supplying checked references
+
+This helper does not browse the web. First inspect credible references, then
+supply their recorded ratios with `research_volumes.py CARD.json --sources
+CHECKED-SOURCES.json --cache CACHE.json`. With no source catalogue and no usable
+checked cache entry, the result stays unresolved; zero candidates is not a
+completed web search. The bundled `volume-sources.example.json` contains
+fictional `example.invalid` references for arithmetic fixtures. It is never
+loaded by default and must never be reported as real research.
+
+The JSON root contains a `sources` array. Each entry records one checked
+ratio using these loader fields; no filled example or implementation read
+is needed to author it.
+
+| Required key | Value to record |
+|---|---|
+| `ingredient` | Source ingredient identity, as a string |
+| `url`, `title` | Actual source URL and title, including its row or section locator |
+| `accessed` | Actual access date, `YYYY-MM-DD` |
+| `original_ratio` | Source's own volume-to-mass statement, as a string |
+| `amount`, `grams` | Positive finite numbers: source volume amount and its corresponding mass in grams |
+| `unit` | `cup`, `tbsp`, `tsp` or `quart` |
+| `unit_convention` | `US`, `metric` or `AU`; use the convention supported by the reference |
+
+| Optional key | Loader default and meaning |
+|---|---|
+| `aliases` | `[]`; additional matching ingredient names |
+| `state` | `""`; source preparation state or form |
+| `brand` | `null`; source product brand when established |
+| `tier` | `"chart"`; hierarchy tier: `exact_product`, `chart`, `usda` or `fallback` |
+| `state_match` | `""`; explanation of ingredient and preparation-state agreement |
+| `proxy` | `true`; set `false` only for a matching identity/state without substitution |
+| `confidence` | `"medium"`; evidence confidence, not a measurement claim |
+| `measure` | `"total_mass"`; the ratio must describe total serving mass |
+
+Loader defaults do not establish missing evidence. Record state, match and
+proxy status truthfully; a generic chart does not establish a brand-specific
+or measured batch value. A nutrition panel's fat mass is not serving mass.
+
+Synthetic/example references previously written into a cache are ignored by
+normal/default research. Passing an explicit fixture catalogue can opt into its
+matching synthetic records for tests; doing so does not make them real sources.
+Existing measured volumes remain the cook's supplied evidence. On reprocessing,
+derived volumes are recomputed against current ingredient identity, state and
+resolved mass using matching checked references or cache entries. An unavailable
+reference or mass leaves the previous derived volume withdrawn and unresolved.
+Synthetic/example references also receive an explicit withdrawal note when not
+opted into for a fixture. The input record is preserved; the helper returns an
+updated copy.
 
 ## The source cache
 
