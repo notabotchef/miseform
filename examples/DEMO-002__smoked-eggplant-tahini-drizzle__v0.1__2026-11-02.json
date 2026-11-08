@@ -1,0 +1,232 @@
+{
+  "recipe_id": "DEMO-002",
+  "title": "SMOKED EGGPLANT WITH TAHINI DRIZZLE AND FLAKE SALT",
+  "version": "v0.1",
+  "revision_date": "2026-11-02",
+  "status": "R&D",
+  "theme": "original",
+  "recipe_type": "component",
+  "library_name": "Demonstration Kitchen",
+  "intro": "A smoked vegetable component finished with a cold-emulsified tahini drizzle. The eggplant is smoked whole, peeled and trimmed before weighing, so the grams on the card are the trimmed edible mass that reaches the plate, not the as-purchased mass. The drizzle seizes and loosens as it is stirred; endpoint is texture, not time.",
+  "facts": {
+    "time_total": "22 minutes",
+    "time_active": "22 min",
+    "time_inactive": "0 min",
+    "difficulty_level": "Intermediate",
+    "difficulty_technique": "Smoked component with a cold emulsified drizzle",
+    "yield_summary": "598 g usable",
+    "yield_portions": "74 portions at 8.0 g",
+    "storage_summary": "Unconfirmed",
+    "storage_reference": "House SOP required"
+  },
+  "equipment": "Smoker with hickory chips, wire rack, bowl, scale readable to 0.1 g, small mixing bowl, spoon, warm plates, portion scale. One 611 g input batch only.",
+  "allergens": "Sesame (tahini). Simulated label review lists no additional declared allergens. Shared utensils need house cross-contact controls; no free-from claim.",
+  "percentage_basis": {
+    "basis_label": "Smoked eggplant = 100% = 420 g; tahini = 100% = 90 g within its own component.",
+    "reference_row_id": "E1",
+    "reference_weight_g": 420
+  },
+  "process_controls": {
+    "sous_vide": "N/A - no sous vide equipment or process on this card",
+    "combi": "N/A - no oven or combi step; the eggplant is smoked",
+    "fermentation": "N/A - no culture or starter is used",
+    "pickling": "N/A - no acid or brine step",
+    "reduction": "N/A - no evaporation step; the drizzle is emulsified cold",
+    "emulsification": "Tahini, lemon juice and cold water are stirred to a pouring consistency; no heat",
+    "chilling": "N/A - no chilling step; the component is served warm",
+    "smoking": "Hickory chips at approximately 105 C, eggplant turned once at 11 minutes, smoke until skin blisters and flesh yields"
+  },
+  "labeling": {
+    "product_name": "Smoked eggplant with tahini drizzle",
+    "batch_or_date_code": "NEEDS CHEF CONFIRMATION - date code convention is not set",
+    "use_by_basis": "NEEDS CHEF CONFIRMATION - no approved shelf-life basis located",
+    "storage_instruction": "NEEDS CHEF CONFIRMATION - approved storage conditions and container are unresolved",
+    "allergen_declaration": "Sesame",
+    "preparer_or_station": "NEEDS CHEF CONFIRMATION - preparer and station are not recorded"
+  },
+  "components": [
+    {
+      "name": "For the smoked eggplant",
+      "reference_row_id": "E1",
+      "reference_weight_g": 420,
+      "ingredients": [
+        {
+          "row_id": "E1",
+          "name": "Japanese eggplant, smoked over hickory chips, peeled and cut into 6 cm lengths",
+          "weight_g": 420,
+          "volume": "≈ two medium eggplants (pieces)",
+          "notes": "Smoked whole, then peeled and trimmed; weight is the trimmed edible mass. Volume is a generic proxy, not a sourced conversion; weight authoritative."
+        },
+        {
+          "row_id": "E2",
+          "name": "Grapeseed oil brushed on the grill rack before smoking",
+          "weight_g": 18,
+          "volume": null,
+          "volume_source": {
+            "status": "unresolved",
+            "unresolved_reason": "not supplied; weighed at the station",
+            "unit_convention": "US"
+          },
+          "notes": "Not supplied; weighed at the station."
+        }
+      ]
+    },
+    {
+      "name": "For the tahini drizzle",
+      "reference_row_id": "T1",
+      "reference_weight_g": 90,
+      "ingredients": [
+        {
+          "row_id": "T1",
+          "name": "Unhulled tahini, stirred to a pouring consistency",
+          "weight_g": 90,
+          "volume": "≈ 6.0 tbsp (US)",
+          "notes": "Step 3. Volume is a labeled proxy; weight authoritative."
+        },
+        {
+          "row_id": "T2",
+          "name": "Lemon juice",
+          "weight_g": 30,
+          "volume": "≈ 2.0 tbsp (US)",
+          "notes": "Step 3. Volume is a labeled proxy; weight authoritative."
+        },
+        {
+          "row_id": "T3",
+          "name": "Cold water",
+          "weight_g": 45,
+          "volume": "≈ 3.0 tbsp (US)",
+          "notes": "Step 3. Volume is a labeled proxy; weight authoritative."
+        }
+      ]
+    },
+    {
+      "name": "For the finish",
+      "reference_row_id": "F1",
+      "reference_weight_g": 6,
+      "ingredients": [
+        {
+          "row_id": "F1",
+          "name": "Flake salt, Maldon-style",
+          "weight_g": 6,
+          "volume": null,
+          "volume_source": {
+            "status": "unresolved",
+            "unresolved_reason": "not supplied; weighed at the station",
+            "unit_convention": "US"
+          },
+          "notes": "Not supplied; weighed at the station."
+        },
+        {
+          "row_id": "F2",
+          "name": "Black pepper, coarsely cracked",
+          "weight_g": 2,
+          "volume": null,
+          "volume_source": {
+            "status": "unresolved",
+            "unresolved_reason": "not supplied; weighed at the station",
+            "unit_convention": "US"
+          },
+          "notes": "Not supplied; weighed at the station."
+        }
+      ]
+    }
+  ],
+  "input_total_g": 611,
+  "usable_yield_g": 598,
+  "loss_g": 13,
+  "portion_g": 8,
+  "portions": 74,
+  "batch_factor": 1,
+  "tested_batch_range": "one 611 g input batch",
+  "stages": [
+    {
+      "name": "SMOKE",
+      "tip": "Resist the urge to rinse the eggplant after smoking; rinsing washes the smoke off the flesh.",
+      "steps": [
+        {
+          "number": 1,
+          "text": "Light the smoker with hickory chips and bring it to approximately 105 °C. Lay the eggplant lengths (E1) on the wire rack in a single layer, leaving space between each piece so smoke reaches every side. Brush the rack with grapeseed oil (E2) first so nothing sticks. Smoke for 22 minutes from the first chip, turning the eggplant once at 11 minutes, until the skin is blistered all over and the flesh gives way under a spoon tip. Consequential equipment: smoker, hickory chips, wire rack. Endpoint: blistered skin, tender flesh, no raw resistance.",
+          "ingredient_refs": ["E1", "E2"]
+        },
+        {
+          "number": 2,
+          "text": "Transfer the smoked eggplant (E1) to a bowl, cover it tightly, and rest for 8 minutes so steam loosens the skin. Peel the skin off in strips and discard it. Cut the flesh into 6 cm lengths, weigh the trimmed flesh on the 0.1 g scale, and record the actual mass; do not backfill a guessed number if the trim differs from the reference.",
+          "ingredient_refs": ["E1"]
+        }
+      ]
+    },
+    {
+      "name": "EMULSIFY",
+      "tip": "Cold water loosens the drizzle faster than warm water and keeps it from breaking.",
+      "steps": [
+        {
+          "number": 3,
+          "text": "Put the tahini (T1) in a small bowl. Add the lemon juice (T2) and the cold water (T3) in two additions, stirring between each addition. The mixture will seize and thicken before it loosens; keep stirring until it reaches a pouring consistency that coats a spoon and holds a trail for 3 seconds. The tahini basis is fixed at 90 g, so adjust only with lemon juice or water, never with more tahini, and record any adjustment in the trial notes.",
+          "ingredient_refs": ["T1", "T2", "T3"]
+        },
+        {
+          "number": 4,
+          "text": "Taste the finished drizzle for balance. It should taste of tahini and lemon, with the salt coming from the flake salt at finish, not from the drizzle. Log any failed endpoint for trial review.",
+          "ingredient_refs": ["T1", "T2", "T3"]
+        }
+      ]
+    },
+    {
+      "name": "FINISH & PORTION",
+      "tip": "Portion weight is the control; plating arrangement is not.",
+      "steps": [
+        {
+          "number": 5,
+          "text": "Arrange the smoked eggplant lengths on a warm plate in a single layer. Drizzle the tahini mixture evenly over the cut surfaces, about 8.0 g per portion. Sprinkle flake salt (F1) and cracked black pepper (F2) across the top immediately before service, so nothing sits in the salt long enough to draw moisture out of the eggplant.",
+          "ingredient_refs": ["F1", "F2"]
+        },
+        {
+          "number": 6,
+          "text": "Weigh each finished portion at 8.0 g and log the usable mass against the 598 g reference yield. Any portion outside 7.5 g to 8.5 g is re-weighed, not approximated. Record the actual usable mass and transfer loss on every trial.",
+          "ingredient_refs": []
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "heading": "Service & plating",
+      "text": "Serve warm on warm plates, as a component, not a standalone dish. No verified plating photograph is available; plating instructions are the controlling record."
+    },
+    {
+      "heading": "Holding & storage",
+      "text": "Unresolved: approved conditions, container, label, use-by and discard rule. No shelf life is assigned. Production remains blocked."
+    },
+    {
+      "heading": "Scaling & variations",
+      "text": "At factor 2: 840 g smoked eggplant, 36 g grapeseed oil, 180 g tahini, 60 g lemon juice and 90 g cold water. Run separate reference-size batches; do not double the smoker load or the smoking time. Finished yield is not guaranteed. No substitutions are approved."
+    },
+    {
+      "heading": "Checks & corrective action",
+      "text": "Check smoke endpoint, peel yield, drizzle consistency, salt distribution and portion weight on every trial. Record deviations for chef review. Recheck current supplier labels and house utensil controls. No validated food-safety critical control point is asserted; applicable controls await house SOP review."
+    },
+    {
+      "heading": "Volume research and sources",
+      "text": "Volumes are researched approximations, not measurements; gram weights stay authoritative. Source 1: USDA FoodData Central, Tahini, sesame butter, https://fdc.nal.usda.gov/food-details/169086/nutrients, accessed 2026-10-26, listing approximately 15 g per tablespoon in US measures (1 US tbsp = 14.79 mL), so 90 g of tahini is approximately 6.0 tbsp. Source 2: USDA FoodData Central, Lemon juice, raw, https://fdc.nal.usda.gov/food-details/169566/nutrients, accessed 2026-10-26, listing approximately 15 g per tablespoon, so 30 g is approximately 2.0 tbsp and 45 g is approximately 3.0 tbsp. Units convention: US tablespoon throughout. Proxy status: rows T1, T2 and T3 use generic ratios because the purchased brands were not provided, so all three are labeled proxies rather than exact matches."
+    },
+    {
+      "heading": "Volume arithmetic and rounding",
+      "text": "T1: 90 g divided by 15 g per US tbsp = 6.0 tbsp. T2: 30 g divided by 15 g per US tbsp = 2.0 tbsp. T3: 45 g divided by 15 g per US tbsp = 3.0 tbsp. Rounded to the nearest 0.1 tbsp. Where an exact measure is needed, weigh the ingredient and measure the spoon."
+    }
+  ],
+  "release_blockers": [
+    "Approved holding and storage conditions, container labeling, use-by basis and discard rule.",
+    "Second-cook reproduction with chef-approved tolerances for yield, texture and portioning.",
+    "Explicit production release for this exact final version."
+  ],
+  "release_checklist": [
+    "Confirm holding/storage, labeling, use-by and discard SOP.",
+    "Complete second-cook reproduction; approve yield, texture and portion tolerances.",
+    "Obtain explicit chef release for the exact final version after controls are resolved."
+  ],
+  "provenance": {
+    "evidence": "Fictional demonstration card. Original fictional notes and chef replies; no actual photo inspected. Ingredient weights, method and usable yield are simulated statements. Percentages, portion counts and factor-2 quantities are calculations. Household volumes are researched approximations derived from the cited public sources with their access dates, not measured spoonfuls.",
+    "validation": "One simulated batch; no real cook test and no production approval. New trial with no predecessor. Local demonstration only.",
+    "filing": "Local demonstration only. Proposed relative route: R&D / needs-confirmation. No remote write attempted."
+  }
+}

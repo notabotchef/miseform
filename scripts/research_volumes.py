@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Research the household measure for every ingredient a card needs one for.
+"""Apply checked household-measure references to a recipe card.
 
 Usage:
 
@@ -8,9 +8,10 @@ Usage:
                                              [--cache CACHE.json]
                                              [--check]
 
-The card is read, every ingredient that has an authoritative mass and no
-published measure is researched against the source hierarchy, and the card
-is written back with the derived measure and its structured provenance.
+This helper makes no web or API requests. The host agent supplies checked
+references through --sources, after bounded web research. The card is read,
+matching references/cache are applied, and the card is written back with
+derived measures and structured provenance. Missing references stay unresolved.
 
 The cache is keyed by ingredient, preparation state and brand, so a
 reference already checked for one product is never handed to another. The
@@ -38,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="research_volumes.py",
         description=(
-            "Research every ingredient that needs a household measure and "
+            "Apply checked references to ingredients needing a household measure and "
             "write the derived measure and its provenance back onto the card."
         ),
     )
@@ -51,7 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sources",
         default=None,
-        help="A source catalogue to research against (default: the shipped example)",
+        help="Explicit checked source catalogue (default: none; missing references stay unresolved). Synthetic examples are opt-in fixtures only.",
     )
     parser.add_argument(
         "--cache",

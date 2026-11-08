@@ -172,13 +172,17 @@ These are never answered by a proposal, a calculation, a retrieved recipe, or
 an unconfirmed default. They come from the chef, from an approved SOP, or they
 stay unknown, and an unknown one of them blocks production release:
 
-- thermal endpoints, cooking and core temperatures, and where the temperature
-  is measured
+- safety-critical thermal endpoints and product-core time/temperature controls,
+  including where the temperature is measured
 - cooling and holding method, duration, and limits
 - shelf life, use-by basis, and discard rules
 - allergen status, cross-contact controls, and compound ingredient labels
 - measured usable yield and portion mass used for production
 - approved SOP references and release approvals
+
+An appliance setpoint supported by a cited comparable preparation may appear
+as proposed routine technique in an unreleased draft. It does not establish
+a validated thermal process or a safe product endpoint.
 
 Research can propose a technique around these; it can never close them. A
 default may tell Miseform which SOP applies. It may not stand in for the SOP,

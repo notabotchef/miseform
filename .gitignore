@@ -23,3 +23,11 @@ __pycache__/
 .ruff_cache/
 *.pyc
 .DS_Store
+# Runtime proof and release work belong outside public source
+/work/
+/.theme-parity-scratch/
+/.miseform-backups/
+.miseform-install.json
+SOURCE_MANIFEST.json
+*.zip
+.miseform-runtime.json

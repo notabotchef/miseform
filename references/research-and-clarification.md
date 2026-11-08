@@ -119,6 +119,14 @@ decides which technique questions matter at all.
   farm, a video with no quantities, and an AI-generated recipe are not
   comparable.
 
+### Shared stop condition
+
+All host web research shares at most **12 search/fetch attempts or 4 minutes**, whichever comes first. Count failed attempts too, across every component, volume reference, tool and background job. Per-component and per-ingredient limits are ceilings, not quotas to fill. Reuse a checked matching reference for multiple rows.
+
+On HTTP 429, an authentication failure or provider unavailability, stop using that provider for this run. Do not retry alternate API endpoints or generate custom network scripts. Record what actually failed and which ingredients remain unresearched or unresolved; budget exhaustion is not an ingredient-specific lookup that never happened. Proceed to proposal and local draft with explicit unknowns. Do not reset the budget on a correction; research only the changed ingredient or method within a fresh bounded correction pass when necessary.
+
+The host's web tools discover references. `research_volumes.py` is an offline checked-catalogue/cache applicator; it does not perform those web searches. See the [checked reference format](volume-research.md#supplying-checked-references).
+
 ### What a comparable recipe licenses
 
 | Taken from the source | Never taken from the source |
@@ -283,7 +291,7 @@ never describes the recipe as tested or approved.
 The newest chef statement wins. A correction that arrives after the research,
 or after a draft has been written, replaces the earlier value: the record takes
 the new value under `chef-stated`, and the draft is rebuilt from it. The
-correction is shown in the proposal, not silently applied.
+correction is shown in the proposal, not silently applied. Preserve unaffected rows, research and prior answers; invalidate only the changed ingredient identity, its density and affected method or component links. A duration supplied in response to several questions answers the duration only, not an unstated temperature, percentage denominator or approved endpoint. Rebind the workflow ledger and rebuild through the installed bundled toolchain. Do not replace it with a custom exporter.
 
 A correction never has to be reconciled against a retrieved recipe: the
 cook's statement outranks any source.
@@ -321,8 +329,8 @@ a research source.
 
 These come from the cook, from an approved SOP, or they stay unknown:
 
-- thermal endpoints, cooking and core temperatures, and where the temperature
-  is measured;
+- safety-critical thermal endpoints and product-core time/temperature controls,
+  including where the temperature is measured;
 - cooling and holding method, duration, and limits;
 - shelf life, use-by basis, and discard rules;
 - allergen status, cross-contact controls, and compound ingredient labels;
@@ -440,3 +448,56 @@ cannot drift away from what the skill says in prose.
   }
 }
 ```
+
+## Bound workflow completeness ledger
+
+Before claiming a standardized draft is usefully complete, create a version-1
+workflow sidecar and run `build_card.py CARD.json --workflow-ledger workflow.json
+--outdir DIR`. Direct builds without this option remain available for rendering
+and legacy records; their successful exit does not establish workflow coverage.
+The sidecar lives with the local intake evidence, outside a public skill package.
+
+The ledger binds the exact UTF-8 intake file and canonical card bytes by SHA-256.
+`input_file` is a relative path contained within the sidecar directory, including
+when symlinks are resolved. Keep intake evidence under that directory. Corrections
+require updating the input, card and ledger together; an old ledger fails binding.
+Every ingredient has one entry under `ingredients`, pointing to its canonical
+`/components/N/ingredients/M` object. Record `input_locator`, the literal
+`input_excerpt`, and a `retained_pointer` to a string field within that ingredient
+(such as `notes`) that retains that excerpt, including the supplied quantity and
+unit. Do not silently replace count or spoon units with a proposed mass.
+
+Each ingredient also needs its own `research` and `allergens` dispositions.
+Research is either `sourced_proposal` with positive numeric `amount`, `unit`,
+`source` and `basis`; `research_unresolved` with a nonempty `attempts` array of
+`query`, `source`, `result` records and a `reason`; or `not_applicable` with a
+reason. Source proposals belong in evidence and clearly labelled card notes;
+they do not turn an unweighed ingredient into a measured `weight_g`. An actual
+unsuccessful lookup is valid evidence; an empty attempts list is not.
+
+Allergen dispositions are `known` with an `intentional` array (empty when none
+are identified) and `basis`, ingredient-specific `unknown_external` with a
+`reason`, or justified `not_applicable`. A batch-wide warning does not replace
+these entries. Unknown compound-product identity may remain unknown pending its
+supplier label; never infer a compound's allergens from a generic product name.
+
+Every component has one `components` entry pointing to `/components/N`, with a
+`timing` disposition: `sourced_proposal` has positive numeric `minimum` and
+`maximum`, `unit` (`seconds`, `minutes` or `hours`), `endpoint`, `source` and
+`basis`; alternatively use actual `research_unresolved` attempts and reason, or
+justified `not_applicable`. Routine preparation timing needs a useful proposed
+range and endpoint when research can supply them. Measured yields, supplier
+facts, safety approval and other external measurements may remain explicitly
+unknown in the card. This check does not require or manufacture those numbers.
+
+Incomplete coverage still exports the R&D card and returns nonzero with
+`WORKFLOW` findings. It confers no useful-completion or release approval. A
+`.workflow-receipt.json` records the checked ledger hash, canonical source hash,
+artifact manifest hash and findings. Preserve it with the build evidence.
+
+The checker verifies declared coverage, shape, pointer retention and byte
+binding. It cannot prove that extraction omitted nothing, that a cited source
+supports a proposal, that a justification is appropriate, or that a compound's
+identity is correct. Independent review must judge those semantic questions;
+a zero-finding ledger is neither a completeness percentage nor production
+approval.

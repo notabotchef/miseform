@@ -40,7 +40,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import capability_check  # noqa: E402
 import install as installer  # noqa: E402
-from card_model import load_card  # noqa: E402
+from card_model import Card, load_card  # noqa: E402
 from exporter import export_xlsx  # noqa: E402
 
 MANIFEST = ROOT / "requirements.txt"
@@ -741,11 +741,66 @@ def test_the_package_carries_the_rc_references():
         assert (ROOT / "references" / name).exists(), name
 
 
-def test_the_public_exporter_keeps_the_loss_cell_guard():
-    """The guard ported from the installed copy is still in the source."""
+def test_the_public_exporter_keeps_the_loss_cell_guard(tmp_path: Path):
+    """The loss cell stays empty when there is no measured yield, never the
+    input mass. The source guards the subtraction and the shipped workbook
+    honors it on real recalculation."""
     source = (ROOT / "scripts" / "exporter.py").read_text(encoding="utf-8")
     assert "ISNUMBER" in source
-    assert 'f\'=IF(ISNUMBER(C{row}),C{total_row}-C{row},"")\'' in source
+
+    data = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+    data["usable_yield_g"] = None
+    card = Card(data)
+    out = tmp_path / "no-yield.xlsx"
+    result = export_xlsx(card, out)
+    assert result.ok, result.detail
+
+    import openpyxl
+
+    formulas = openpyxl.load_workbook(out)
+    sheet = formulas["Recipe Card"]
+    loss_cells = [
+        cell
+        for row in sheet.iter_rows(min_col=5, max_col=5)
+        for cell in row
+        if isinstance(cell.value, str)
+        and cell.value.startswith("=")
+        and "-" in cell.value
+        and "SUM" not in cell.value
+        and "C" in cell.value
+    ]
+    assert loss_cells, "no loss formula was written"
+    for cell in loss_cells:
+        formula = str(cell.value)
+        assert "ISNUMBER(" in formula, (
+            f"{cell.coordinate} is an unguarded loss formula: {formula}"
+        )
+        assert '""' in formula, (
+            f"{cell.coordinate} does not yield an empty cell: {formula}"
+        )
+
+    # Real formula evaluation: with no measured yield the loss cell stays
+    # empty, never the input mass.
+    import formulas
+
+    xl = formulas.ExcelModel().loads(str(out)).finish()
+    solution = xl.calculate()
+    computed: dict = {}
+    for key, val in solution.items():
+        name = str(key)
+        if "!" not in name:
+            continue
+        cell = name.rsplit("!", 1)[1]
+        sheet_name = name.split("]")[-1].split("'")[0].split("!")[0]
+        try:
+            computed[(sheet_name.upper(), cell)] = val.value[0, 0]
+        except Exception:
+            continue
+    for cell in loss_cells:
+        value = computed.get(("RECIPE CARD", cell.coordinate))
+        assert value in (None, ""), (
+            f"{cell.coordinate} recalculated to {value!r} with no measured yield"
+        )
 
 
 def test_the_diagnostic_and_installer_ship_with_the_package():
@@ -753,3 +808,177 @@ def test_the_diagnostic_and_installer_ship_with_the_package():
     assert (ROOT / "scripts" / "capability_check.py").exists()
     assert (ROOT / "scripts" / "install.py").exists()
     assert MANIFEST.exists()
+
+
+def test_customized_exporter_is_backed_up_before_update(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(installer, "BACKUP_ROOT", tmp_path / "backups", raising=False)
+    destination = tmp_path / 'skill'
+    installer.copy_skill(destination)
+    exporter = destination / 'scripts' / 'exporter.py'
+    custom = exporter.read_bytes() + b'\n# local kitchen customization\n'
+    exporter.write_bytes(custom)
+    installer.copy_skill(destination)
+    backups = list((tmp_path / 'backups').rglob('exporter.py'))
+    assert backups and any(path.read_bytes() == custom for path in backups)
+    assert exporter.read_bytes() == (ROOT / 'scripts' / 'exporter.py').read_bytes()
+
+
+def test_release_archive_excludes_runtime_private_and_duplicate_paths(tmp_path: Path):
+    import release_package
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'SKILL.md').write_text('metadata:\n  version: "4.0.0"\n')
+    (package / 'VERSION').write_text('4.0.0\n')
+    for relative in ['scripts/build_card.py', 'scripts/filing 2.py', 'work/evidence.txt',
+                     'profiles/profile.json', 'examples/recipe.local.json', '.env.secret',
+                     'scripts/__pycache__/bad.pyc', 'scripts/secret-link.py']:
+        target = package / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if relative.endswith('secret-link.py'):
+            target.symlink_to(tmp_path / 'outside')
+        else:
+            target.write_text('synthetic')
+    selected = {str(path.relative_to(package)) for path in release_package.public_files(package)}
+    assert selected == {'SKILL.md', 'VERSION', 'scripts/build_card.py'}
+    archive = release_package.build_release(package, tmp_path / 'release')
+    import zipfile
+    with zipfile.ZipFile(archive) as zipped:
+        assert 'miseform/SOURCE_MANIFEST.json' in zipped.namelist()
+        manifest = json.loads(zipped.read('miseform/SOURCE_MANIFEST.json'))
+        assert manifest['version'] == '4.0.0'
+        assert set(manifest['files']) == selected
+
+
+def test_install_refuses_symlinked_destination_file(tmp_path: Path):
+    destination = tmp_path / 'skill'
+    (destination / 'scripts').mkdir(parents=True)
+    outside = tmp_path / 'outside.py'
+    outside.write_text('keep me')
+    (destination / 'scripts' / 'exporter.py').symlink_to(outside)
+    with pytest.raises(installer.InstallError, match='symlink'):
+        installer.copy_skill(destination)
+    assert outside.read_text() == 'keep me'
+
+
+def test_runtime_launcher_uses_recorded_interpreter_and_reports_missing_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import run as launcher
+    scripts = tmp_path / 'scripts'
+    scripts.mkdir()
+    monkeypatch.setattr(launcher, '__file__', str(scripts / 'run.py'))
+    (scripts / 'probe.py').write_text('print("synthetic runtime probe")')
+    runtime = tmp_path / '.miseform-runtime.json'
+    runtime.write_text(json.dumps({'python': sys.executable}))
+    assert launcher.main(['probe.py']) == 0
+    runtime.write_text(json.dumps({'python': str(tmp_path / 'missing-python')}))
+    assert launcher.main(['probe.py']) == 1
+    assert launcher.main(['../probe.py']) == 2
+
+
+def test_extracted_source_manifest_rejects_mutation_before_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import release_package
+    import zipfile
+    archive = release_package.build_release(ROOT, tmp_path / 'release')
+    with zipfile.ZipFile(archive) as zipped:
+        zipped.extractall(tmp_path / 'extracted')
+    source = tmp_path / 'extracted' / 'miseform'
+    release_package.verify_source(source)
+    (source / 'scripts' / 'exporter.py').write_text('# altered after release\n')
+    monkeypatch.setattr(installer, 'PACKAGE', source)
+    with pytest.raises(installer.InstallError, match='integrity'):
+        installer.check_source()
+
+
+def test_public_selection_excludes_nested_logs_scratch_and_keys(tmp_path: Path):
+    import release_package
+    public = tmp_path / 'scripts' / 'build_card.py'
+    public.parent.mkdir()
+    public.write_text('# synthetic public source\n')
+    for relative in ['scripts/debug.log', 'tests/logs/session.log',
+                     'examples/scratch/chef-notes.txt',
+                     'examples/.theme-parity-scratch/output.json',
+                     'scripts/private-key.pem', 'scripts/signing.key',
+                     'examples/secrets/record.json', 'examples/evidence/record.json']:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('synthetic do not ship')
+    assert release_package.public_files(tmp_path) == [public]
+
+
+def test_upgrade_keeps_backups_outside_recursive_skill_discovery(tmp_path, monkeypatch):
+    package = tmp_path / "package"
+    package.mkdir()
+    (package / "SKILL.md").write_text("current skill")
+    (package / "VERSION").write_text("test-version\n")
+    destination = tmp_path / "hermes" / "skills" / "miseform"
+    destination.mkdir(parents=True)
+    (destination / "SKILL.md").write_text("custom skill")
+    legacy = destination / ".miseform-backups" / "old-hash"
+    legacy.mkdir(parents=True)
+    (legacy / "SKILL.md").write_text("legacy skill")
+    (legacy / "private.local.json").write_text("private backup")
+    (destination / "notes.md").write_text("keep notes")
+    backup_root = tmp_path / "state" / "install-backups"
+    monkeypatch.setattr(installer, "PACKAGE", package)
+    monkeypatch.setattr(installer, "BACKUP_ROOT", backup_root, raising=False)
+    installer.copy_skill(destination)
+    assert list(destination.parent.rglob("SKILL.md")) == [destination / "SKILL.md"]
+    backups = [p.read_text() for p in backup_root.rglob("SKILL.md")]
+    assert sorted(backups) == ["custom skill", "legacy skill"]
+    assert [p.read_text() for p in backup_root.rglob("private.local.json")] == ["private backup"]
+    assert (destination / "notes.md").read_text() == "keep notes"
+    first_manifest = (destination / ".miseform-install.json").read_bytes()
+    first_backups = sorted(str(p.relative_to(backup_root)) for p in backup_root.rglob("*"))
+    assert installer.copy_skill(destination) == 0
+    assert (destination / ".miseform-install.json").read_bytes() == first_manifest
+    assert sorted(str(p.relative_to(backup_root)) for p in backup_root.rglob("*")) == first_backups
+
+
+def test_backup_destination_cannot_be_inside_skill_discovery_root(tmp_path, monkeypatch):
+    destination = tmp_path / "skills" / "miseform"
+    destination.mkdir(parents=True)
+    (destination / "SKILL.md").write_text("custom skill")
+    monkeypatch.setattr(installer, "BACKUP_ROOT", destination.parent / "backups", raising=False)
+    with pytest.raises(installer.InstallError, match="discovery"):
+        installer.copy_skill(destination)
+    assert (destination / "SKILL.md").read_text() == "custom skill"
+
+
+def test_legacy_backup_migration_never_replaces_existing_backup_tree(tmp_path, monkeypatch):
+    destination = tmp_path / "skills" / "miseform"
+    legacy = destination / ".miseform-backups"
+    legacy.mkdir(parents=True)
+    (legacy / "SKILL.md").write_text("second preserved skill")
+    monkeypatch.setattr(installer, "BACKUP_ROOT", tmp_path / "backups")
+    directory = installer.backup_directory(destination)
+    (directory / "legacy").mkdir(parents=True)
+    (directory / "legacy" / "SKILL.md").write_text("first preserved skill")
+    installer.migrate_legacy_backups(destination, directory)
+    assert (directory / "legacy" / "SKILL.md").read_text() == "first preserved skill"
+    assert (directory / "legacy-2" / "SKILL.md").read_text() == "second preserved skill"
+    assert not legacy.exists()
+
+
+def test_backup_root_cannot_enter_another_hosts_discovery_tree(tmp_path, monkeypatch):
+    destination = tmp_path / "hermes" / "skills" / "miseform"
+    other_host = tmp_path / "codex" / "skills" / "miseform"
+    monkeypatch.setattr(installer, "HOSTS", {"codex": other_host})
+    monkeypatch.setattr(installer, "BACKUP_ROOT", other_host.parent / "backups")
+    with pytest.raises(installer.InstallError, match="discovery"):
+        installer.copy_skill(destination)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize("inventory", [[], None, {"files": []}])
+def test_malformed_inventory_preserves_customized_skill(tmp_path, monkeypatch, inventory):
+    package = tmp_path / "package"
+    package.mkdir()
+    (package / "SKILL.md").write_text("new skill")
+    destination = tmp_path / "skills" / "miseform"
+    destination.mkdir(parents=True)
+    (destination / "SKILL.md").write_text("custom skill")
+    (destination / ".miseform-install.json").write_text(json.dumps(inventory))
+    monkeypatch.setattr(installer, "PACKAGE", package)
+    monkeypatch.setattr(installer, "BACKUP_ROOT", tmp_path / "backups")
+    installer.copy_skill(destination)
+    assert [p.read_text() for p in (tmp_path / "backups").rglob("SKILL.md")] == ["custom skill"]
+    assert (destination / "SKILL.md").read_text() == "new skill"

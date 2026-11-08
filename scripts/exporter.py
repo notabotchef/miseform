@@ -1,4 +1,4 @@
-"""Export a recipe card to PDF and Excel.
+'''Export a recipe card to PDF and Excel.
 
 PDF is rendered from the card's HTML edition with real selectable text.
 Excel is a native ``.xlsx`` workbook whose reference percentages and scaled
@@ -21,7 +21,10 @@ Design rules enforced here, from ``references/exports.md``:
   cell. The formula stays live and Excel recalculates on open.
 * A wrapped text block gets the row height its own text needs, so no note
   is clipped and no row has to be resized by hand.
-"""
+* Workbook labels are localized per the cook's language; formulas, cell
+  references and cached numbers are never translated, so a localized label
+  never breaks a formula or a reference.
+'''
 
 from __future__ import annotations
 
@@ -42,9 +45,20 @@ from card_model import (
     applicable_process_controls,
     format_quantity,
     format_weight,
+    input_mass_label,
     join_blockers,
+    row_weight_label,
+)
+from translation import display_controls, display_release, display_settings, display_translation, recipe_field
+from locales import (  # noqa: E402
+    DEFAULT_LANGUAGE as _LOCALE_DEFAULT,
+    note_text,
+    recipe_text,
+    step_text,
+    translate,
 )
 from render_html import render_html
+from themes import DEFAULT_THEME as _DEFAULT_THEME, theme as _resolve_theme
 
 CHROME_CANDIDATES = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -78,7 +92,7 @@ def _find_playwright_chromium() -> str | None:
     """Return the Chromium build Playwright installed, if there is one.
 
     ``playwright install chromium`` puts the browser in Playwright's own
-    cache — not on ``PATH`` and not in the macOS application folder — so the
+    cache -- not on ``PATH`` and not in the macOS application folder -- so the
     exporter asks Playwright where it put it. A browser found this way is
     driven exactly like a system Chrome.
     """
@@ -114,8 +128,16 @@ def export_pdf(
     *,
     paper: str = PDF_FORMAT_A4,
     html_path: Path | None = None,
+    theme: str | None = None,
+    language: str = _LOCALE_DEFAULT,
+    texts: dict[str, Any] | None = None,
 ) -> ExportResult:
-    """Render ``card`` to a print-ready PDF with selectable text."""
+    """Render ``card`` to a print-ready PDF with selectable text.
+
+    ``language`` and ``texts`` flow into the HTML edition, so the PDF carries
+    the cook's language: translated labels, localized decimal marks and the
+    translated recipe text when a bundle covers it.
+    """
     try:
         from playwright.sync_api import sync_playwright  # type: ignore
     except Exception as exc:  # pragma: no cover - environment dependent
@@ -135,7 +157,7 @@ def export_pdf(
             "No Chrome/Chromium executable found, so PDF rendering is unavailable.",
         )
 
-    markup = render_html(card)
+    markup = render_html(card, theme=theme, language=language, texts=texts)
     tmp_html = html_path or out_path.with_suffix(".html")
     tmp_html.parent.mkdir(parents=True, exist_ok=True)
     tmp_html.write_text(markup, encoding="utf-8")
@@ -143,7 +165,7 @@ def export_pdf(
     footer = (
         '<div style="font-size:8px;width:100%;text-align:center;color:#57645e">'
         f"{card.recipe_id} · {card.version} · {card.status}"
-        ' — <span class="pageNumber"></span> / <span class="totalPages"></span></div>'
+        ' — <span class="pageNumber"></span> / <span class="totalPages\"></span></div>'
     )
 
     try:
@@ -184,7 +206,7 @@ def export_pdf(
 
 
 def extract_pdf_text(pdf_path: Path) -> str:
-    """Extract PDF text. Uses pdftotext when present, else pypdf, else ''."""
+    """Extract PDF text. Uses pdftotext when present, else pypdf, else ''. """
     if shutil.which("pdftotext"):
         try:
             out = subprocess.run(
@@ -340,7 +362,10 @@ def _patch_cell_result(xml: str, ref: str, value: Any) -> str:
         return xml
 
     attrs = re.sub(r'\s+t="[^"]*"', "", attrs)
-    if isinstance(value, bool):
+    if value is None:
+        attrs += ' t="str"'
+        payload = ""
+    elif isinstance(value, bool):
         attrs += ' t="b"'
         payload = "1" if value else "0"
     elif isinstance(value, (int, float)):
@@ -367,30 +392,49 @@ def _yield_text(card: Card, key: str) -> str:
     return str(facts.get(key, "") or "").strip()
 
 
-def export_xlsx(card: Card, out_path: Path) -> ExportResult:
-    """Build the native Excel card for ``card``."""
+def export_xlsx(
+    card: Card,
+    out_path: Path,
+    *,
+    theme: str | None = None,
+    language: str = _LOCALE_DEFAULT,
+    texts: dict[str, Any] | None = None,
+) -> ExportResult:
+    """Build the native Excel card for ``card``.
+
+    ``language`` selects the cook language for rendered labels; numbers,
+    formulas and cached results stay locale-neutral, so a localized label
+    never breaks a formula or a reference. ``texts`` optionally carries
+    translated recipe text for the language.
+    """
     try:
         import openpyxl  # type: ignore
         from openpyxl.styles import Alignment, Border, Font, PatternFill, Side  # type: ignore
         from openpyxl.worksheet.datavalidation import DataValidation  # type: ignore
     except Exception as exc:  # pragma: no cover - environment dependent
         return ExportResult(
-            "xlsx", None, False, f"openpyxl is not installed, so Excel export is unavailable: {exc}"
+            "xlsx", None, False, f"Excel export is unavailable: {exc}"
         )
 
-    teal = "A0442D"
-    ink = "23231F"
-    pale = "F7F4EE"
-    amber = "FBF1E6"
-    amber_input = "FFF0B3"
+    palette = _resolve_theme(theme or _DEFAULT_THEME).xlsx
+    teal = palette.accent
+    ink = palette.ink
+    pale = palette.pale
+    amber = palette.status_fill
+    amber_input = palette.input_fill
+    muted = palette.muted
+    status_text_c = palette.status_text
+    caption_c = palette.caption
+    tab_color = palette.tab
+    title_font_name = palette.title_font
 
     thin = Side(style="thin", color=teal)
     header_font = Font(name="Arial", size=10, bold=True, color=teal)
     body_font = Font(name="Arial", size=10, color=ink)
     label_font = Font(name="Arial", size=11, bold=True, color=teal)
-    title_font = Font(name="Georgia", size=24, color=ink)
+    title_font = Font(name=title_font_name, size=24, color=ink)
     meta_font = Font(name="Arial", size=10, color=ink)
-    note_font = Font(name="Arial", size=10, color="68685F")
+    note_font = Font(name="Arial", size=10, color=muted)
 
     wb = openpyxl.Workbook()
     sheet = wb.active
@@ -400,8 +444,8 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     scaling = wb.create_sheet("Batch Scaling")
 
     for sh in (sheet, scaling):
-        sh.sheet_view.showGridLines = False
-        sh.sheet_properties.tabColor = teal
+        sh.sheet_view.showGridLines = palette.gridlines
+        sh.sheet_properties.tabColor = tab_color
         sh.column_dimensions["A"].width = 3
         sh.column_dimensions["B"].width = 52
         sh.column_dimensions["C"].width = 14
@@ -456,17 +500,25 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
         for col in range(2, 6):
             sh.cell(row=row, column=col).border = Border(bottom=thin)
 
+    texts = display_translation(card, texts)
     facts = card.data.get("facts", {}) or {}
+    facts = {key: recipe_text(texts, key, value) for key, value in facts.items()}
     basis = card.data.get("percentage_basis") or {}
+
+    title = recipe_text(texts, "title", card.title)
+    intro = recipe_text(texts, "intro", card.data.get("intro", ""))
+    allergens = recipe_text(texts, "allergens", card.data.get("allergens", ""))
+    basis_label = str(basis.get("basis_label", ""))
+    basis_label = recipe_text(texts, "percentage_basis", basis_label)
 
     # The masthead: the title leads on the left, the yield sits top right,
     # where a cook reads it first. Title and yield own separate columns, so a
     # long title wraps inside B:C and never runs into the yield.
-    merged_text(sheet, 2, card.title, 40, title_font, end_col=3, vertical="bottom")
+    merged_text(sheet, 2, title, 40, title_font, end_col=3, vertical="bottom")
     merged_text(
         sheet,
         2,
-        "YIELD",
+        translate("xlsx.yield", language),
         16,
         Font(name="Arial", size=9, bold=True, color=teal),
         start_col=4,
@@ -477,7 +529,7 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     merged_text(
         sheet,
         3,
-        f"{str(card.data.get('recipe_type', '')).upper()} · {str(card.data.get('library_name', '')).upper()}",
+        f"{str(card.data.get('recipe_type', '')).upper()} · {str(recipe_text(texts, 'library_name', card.data.get('library_name', ''))).upper()}",
         22,
         Font(name="Arial", size=10, color=teal),
         end_col=3,
@@ -489,8 +541,8 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
         "\n".join(
             part
             for part in (
-                _yield_text(card, "yield_summary"),
-                _yield_text(card, "yield_portions"),
+                facts.get("yield_summary", ""),
+                facts.get("yield_portions", ""),
             )
             if part
         ),
@@ -501,43 +553,53 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
         horizontal="right",
         vertical="top",
     )
-    merged_text(sheet, 4, str(card.data.get("intro", "")), 52, meta_font)
+    merged_text(sheet, 4, intro, 52, meta_font)
     merged_text(sheet, 5, f"{card.recipe_id} · {card.version} · {card.revision_date}", 24, meta_font)
 
     status_text = card.status
     if not card.is_production:
-        status_text = f"{card.status} — {RELEASE_WARNING}"
+        status_text = f"{card.status} — {translate('status.release_warning', language)}"
     if card.release_blockers:
-        status_text = f"{status_text}. " + join_blockers(card.release_blockers)
+        status_text = f"{status_text}. " + join_blockers(display_release(card, texts))
     merged_text(
         sheet,
         6,
         status_text,
         44,
-        Font(name="Arial", size=11, color="8A3A22"),
+        Font(name="Arial", size=11, color=status_text_c),
         fill=amber,
     )
 
     merged_text(
         sheet,
         8,
-        f"TIME  {facts.get('time_total', '')} total ({facts.get('time_active', '')} active / "
-        f"{facts.get('time_inactive', '')} inactive)"
-        f"     DIFFICULTY  {facts.get('difficulty_level', '')} — {facts.get('difficulty_technique', '')}",
+        translate("xlsx.time", language).format(
+            total=facts.get("time_total", ""),
+            active=facts.get("time_active", ""),
+            inactive=facts.get("time_inactive", ""),
+        )
+        + "     "
+        + translate("xlsx.difficulty", language)
+        + "  "
+        + f"{facts.get('difficulty_level', '')} — {facts.get('difficulty_technique', '')}",
         26,
         meta_font,
     )
-    # The yield leads the card at the top right. The facts strip keeps the
-    # operational facts only, so the yield is never stated twice.
     merged_text(
         sheet,
         9,
-        f"STORAGE  {facts.get('storage_summary', '')} — {facts.get('storage_reference', '')}",
+        translate("xlsx.storage", language)
+        + "  "
+        + f"{facts.get('storage_summary', '')} — {facts.get('storage_reference', '')}",
         26,
         meta_font,
     )
-    merged_text(sheet, 10, f"EQUIPMENT  {card.data.get('equipment', '')}", 44, meta_font)
-    merged_text(sheet, 11, f"ALLERGENS  {card.data.get('allergens', '')}", 44, meta_font)
+    merged_text(
+        sheet, 10, translate("xlsx.equipment", language) + "  " + recipe_text(texts, "equipment", card.data.get("equipment", "")), 44, meta_font
+    )
+    merged_text(
+        sheet, 11, translate("xlsx.allergens", language) + "  " + allergens, 44, meta_font
+    )
 
     # Every formula cell also records the value it evaluates to, so the
     # workbook can ship with a cached result a preview or a data_only reader
@@ -556,15 +618,15 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
         cell_values[(cell.parent.title, cell.coordinate)] = value
         formula_results.setdefault(cell.parent.title, {})[cell.coordinate] = value
 
-    heading(sheet, 13, "INGREDIENTS")
+    heading(sheet, 13, translate("xlsx.ingredients", language))
 
     # Ingredient table. Reference percentages are formulas against the named
     # reference weight cell of the same component.
     row = 14
-    sheet.cell(row=row, column=2, value="Ingredient")
-    sheet.cell(row=row, column=3, value="Weight (g)")
-    sheet.cell(row=row, column=4, value="Volume")
-    sheet.cell(row=row, column=5, value="Scaling %")
+    sheet.cell(row=row, column=2, value=translate("xlsx.table.ingredient", language))
+    sheet.cell(row=row, column=3, value=translate("xlsx.table.weight", language))
+    sheet.cell(row=row, column=4, value=translate("xlsx.table.volume", language))
+    sheet.cell(row=row, column=5, value=translate("xlsx.table.scaling", language))
     for col in range(2, 6):
         cell = sheet.cell(row=row, column=col)
         cell.font = header_font
@@ -578,19 +640,44 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     ingredient_rows: list[tuple[str, int]] = []
     row_weights: dict[int, float] = {}
     weight_sum = 0.0
+    ingredient_count = 0
+    established_count = 0
     resolved = card.resolved_weights()
-    for comp in card.components:
-        comp_name = str(comp.get("name", ""))
+    ing_names: dict[str, str] = {}
+    ingredient_records = {}
+    ingredient_notes = []
+    seen_links: set[tuple[str, str]] = set()
+    for comp_index, comp in enumerate(card.components):
+        comp_name = recipe_field(texts, f"components.{comp_index}.name", str(comp.get("name", "")))
         if isinstance(comp.get("linked"), dict):
-            # A linked component is not restated here, so it contributes no
-            # row and no mass to this card's totals.
+            # An allocation is editable mass; the shared formula stays external.
             link = comp.get("linked") or {}
+            key = (str(link.get("component_id", "")), str(link.get("version", "")))
+            if key in seen_links:
+                continue
+            seen_links.add(key)
             group_cell = sheet.cell(row=row, column=2)
             _set_text(
                 group_cell,
                 f"{comp_name} — linked {link.get('component_id')} {link.get('version')}",
             )
             group_cell.font = Font(name="Georgia", size=12, italic=True, color=ink)
+            group_cell.alignment = Alignment(wrap_text=True, vertical="top")
+            sheet.row_dimensions[row].height = wrapped_height(
+                group_cell.value, group_cell.font, 2, 2
+            )
+            allocation_id = f"__linked_{row}"
+            ingredient_rows.append((allocation_id, row))
+            ing_names[allocation_id] = str(group_cell.value)
+            ingredient_count += 1
+            quantity = link.get("quantity_g")
+            if isinstance(quantity, (int, float)) and not isinstance(quantity, bool) and math.isfinite(quantity) and quantity > 0:
+                put(sheet.cell(row=row, column=3), float(quantity))
+                row_weights[row] = float(quantity)
+                weight_sum += float(quantity)
+                established_count += 1
+            else:
+                _set_text(sheet.cell(row=row, column=3), "Pending")
             for col in range(3, 6):
                 sheet.cell(row=row, column=col).fill = PatternFill("solid", fgColor=pale)
             row += 1
@@ -612,8 +699,18 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
         for ing in ingredients:
             ing_row = row
             row_id = str(ing.get("row_id", ""))
+            allocation_key = f"{comp_index}:{row_id}"
+            ingredient_records[allocation_key] = ing
+            name = recipe_field(texts, f"components.{comp_index}.ingredients.{row_id}.name", ing.get("name", ""))
+            notes = recipe_field(texts, f"components.{comp_index}.ingredients.{row_id}.notes", ing.get("notes", ""))
+            ing_names[allocation_key] = name
+            if notes:
+                ingredient_notes.append(f"{translate('heading.notes', language)} ({row_id}) — {notes}")
             name_cell = sheet.cell(row=ing_row, column=2)
-            _set_text(name_cell, f"{row_id} · {ing.get('name', '')}")
+            _set_text(
+                name_cell,
+                f"{row_id} · {ing_names[allocation_key]}",
+            )
             name_cell.font = body_font
             name_cell.alignment = Alignment(wrap_text=True, vertical="center")
 
@@ -627,21 +724,29 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
             else:
                 # The mass is not established. An empty cell keeps the SUM
                 # honest; a zero would report a mass nobody weighed.
-                _set_text(weight_cell, format_quantity(ing.get("quantity")))
+                _set_text(
+                    weight_cell, format_quantity(ing.get("quantity"), language)
+                )
                 weight_cell.alignment = Alignment(horizontal="right", wrap_text=True)
             weight_cell.font = body_font
             weight_cell.alignment = Alignment(horizontal="right", wrap_text=True)
 
             volume_cell = sheet.cell(row=ing_row, column=4)
             volume = ing.get("volume")
-            _set_text(volume_cell, volume if volume not in (None, "") else "—")
+            _set_text(
+                volume_cell,
+                volume if volume not in (None, "") else "—",
+            )
             volume_cell.font = body_font
             volume_cell.alignment = Alignment(horizontal="right", wrap_text=True, vertical="center")
 
             if row_id == ref_row_id and isinstance(weight, (int, float)):
                 ref_cell = f"C{ing_row}"
                 ref_weight = float(weight)
-            ingredient_rows.append((row_id, ing_row))
+            ingredient_rows.append((allocation_key, ing_row))
+            ingredient_count += 1
+            if isinstance(weight, (int, float)):
+                established_count += 1
             row += 1
 
         if ref_cell:
@@ -658,16 +763,42 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
                     if ref_weight and ing_row in row_weights
                     else "",
                 )
-                pct_cell.number_format = "0%"
+                pct_cell.number_format = "0.0#########%"
                 pct_cell.font = body_font
                 pct_cell.alignment = Alignment(horizontal="right")
 
+    # Numeric cells may resolve missing masses live, but cannot repair a
+    # duplicate allocation or a restated linked formula. Preserve that static
+    # model-level ambiguity in formulas and cached values alike.
+    input_structure_complete = card.derived().input_structure_complete
+    structure_guard = "TRUE" if input_structure_complete else "FALSE"
+    partial_input = (translate("xlsx.partial_input", language).format(
+        n=established_count, m=ingredient_count) if input_structure_complete
+        else translate("xlsx.ambiguous_input", language))
     total_row = row
-    sheet.cell(row=total_row, column=2, value="Total input")
+    sheet.cell(row=total_row, column=2, value=translate("xlsx.total_input", language))
+    # A total is honest only when every ingredient mass is established. A row
+    # the cook supplied as a quantity in their own unit contributes no weighed
+    # mass, so the SUM would silently undercount. Guard the formula and cache
+    # an explicit partial subtotal instead of a completed total.
+    if ingredient_count > 0:
+        guard = "AND(" + structure_guard + "," + ",".join(f"ISNUMBER(C{sheet_row})" for _, sheet_row in ingredient_rows) + ")"
+        total_formula = (
+            f'=IF({guard},SUM(C{first_data_row}:C{total_row - 1}),'
+            f'"{partial_input}")'
+        )
+        total_cached: Any = (
+            weight_sum
+            if input_structure_complete and established_count == ingredient_count
+            else partial_input
+        )
+    else:
+        total_formula = f'"{translate("xlsx.no_input", language)}"'
+        total_cached = translate("xlsx.no_input", language)
     put_formula(
         sheet.cell(row=total_row, column=3),
-        f"=SUM(C{first_data_row}:C{total_row - 1})",
-        weight_sum,
+        total_formula,
+        total_cached,
     )
     sheet.cell(row=total_row, column=3).number_format = "0.0"
     sheet.cell(row=total_row, column=4, value="—")
@@ -677,30 +808,53 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
         cell.border = Border(bottom=thin)
         if col > 2:
             cell.alignment = Alignment(horizontal="right")
+    # Formula results can be long localized partial-status prose. Reserve
+    # enough height even for an initially complete total: clearing an input
+    # later must not hide the warning behind a numeric-column boundary.
+    total_cell = sheet.cell(row=total_row, column=3)
+    total_cell.alignment = Alignment(horizontal="right", vertical="top", wrap_text=True)
+    partial_text = translate("xlsx.partial_input", language).format(n=established_count, m=ingredient_count)
+    sheet.row_dimensions[total_row].height = max(
+        wrapped_height(partial_text, total_cell.font, 3, 3),
+        wrapped_height(total_cached, total_cell.font, 3, 3),
+    )
     row = total_row + 2
+    if not card.derived().input_complete:
+        sheet.cell(row=row, column=2, value=translate("caption.known_input_subtotal", language))
+        put_formula(sheet.cell(row=row, column=3),
+                    f'=SUM(C{first_data_row}:C{total_row - 1})', weight_sum)
+        sheet.cell(row=row, column=3).number_format = "0.0"
+        row += 2
     merged_text(
         sheet,
         row,
-        f"Basis: {basis.get('basis_label', '')}"
-        f" Input total {format_weight(card.data.get('input_total_g'))}."
-        " Volume not measured is shown as —; weigh ingredients.",
+        translate("xlsx.caption_note", language).format(
+            basis=basis_label,
+            input=input_mass_label(card, language),
+        ),
         36,
-        Font(name="Georgia", size=10, color="57645E"),
+        Font(name=palette.body_font, size=10, color=caption_c),
     )
     row += 2
 
     usable_yield = card.data.get("usable_yield_g")
-    sheet.cell(row=row, column=2, value="Measured usable yield (g)")
+    sheet.cell(row=row, column=2, value=translate("xlsx.yield_g", language))
     put(sheet.cell(row=row, column=3), usable_yield)
     sheet.cell(row=row, column=3).number_format = "0.0"
-    sheet.cell(row=row, column=4, value="Loss (g)")
-    # Guard the subtraction: with no measured yield the input cell is empty,
-    # and an unguarded =C_total-C_yield recalculates in Excel to the full
-    # input mass, which would report a fabricated total loss.
+    sheet.cell(row=row, column=4, value=translate("xlsx.loss_g", language))
+    # The loss is honest only when the input total itself is complete: with
+    # an incomplete total, subtracting the yield would report a fabricated
+    # number. The formula guards on ISNUMBER(C_total), so the cached value
+    # must guard the same way and stay empty when the total is partial.
+    total_complete = input_structure_complete and ingredient_count > 0 and established_count == ingredient_count
     put_formula(
         sheet.cell(row=row, column=5),
-        f'=IF(ISNUMBER(C{row}),C{total_row}-C{row},"")',
-        weight_sum - float(usable_yield) if usable_yield is not None else "",
+        f'=IF(AND(ISNUMBER(C{total_row}),ISNUMBER(C{row})),C{total_row}-C{row},"")',
+        (
+            weight_sum - float(usable_yield)
+            if usable_yield is not None and total_complete
+            else ""
+        ),
     )
     sheet.cell(row=row, column=5).number_format = "0.0"
     yield_row = row
@@ -709,10 +863,10 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     row += 1
 
     portion_g = card.data.get("portion_g")
-    sheet.cell(row=row, column=2, value="Portion weight (g)")
+    sheet.cell(row=row, column=2, value=translate("xlsx.portion_g", language))
     put(sheet.cell(row=row, column=3), portion_g)
     sheet.cell(row=row, column=3).number_format = "0.0"
-    sheet.cell(row=row, column=4, value="Complete portions")
+    sheet.cell(row=row, column=4, value=translate("xlsx.complete_portions", language))
     complete_portions = (
         int(math.floor(float(usable_yield) / float(portion_g)))
         if usable_yield is not None and portion_g not in (None, 0)
@@ -720,46 +874,59 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     )
     put_formula(
         sheet.cell(row=row, column=5),
-        f'=IF(AND(ISNUMBER(C{row}),C{row}>0),INT(C{yield_row}/C{row}),"")',
+        f'=IF(AND(ISNUMBER(C{yield_row}),ISNUMBER(C{row}),C{row}>0),INT(C{yield_row}/C{row}),"")',
         complete_portions,
     )
     for col in (2, 3, 4, 5):
         sheet.cell(row=row, column=col).font = body_font
     row += 2
 
-    heading(sheet, row, "GENERAL DIRECTIONS")
+    # Operational notes remain visible outside numeric/formula row ranges.
+    for note in ingredient_notes:
+        merged_text(sheet, row, note, 30, note_font)
+        row += 1
+    if ingredient_notes:
+        row += 1
+    heading(sheet, row, translate("heading.directions", language))
     row += 1
-    for stage in card.stages:
-        merged_text(sheet, row, str(stage.get("name", "")), 25, label_font)
+    for stage_index, stage in enumerate(card.stages):
+        stage_name = recipe_text(texts, f"stage.{stage_index}.name", stage.get("name", ""))
+        merged_text(sheet, row, stage_name, 25, label_font)
         row += 1
         for step in stage.get("steps", []) or []:
-            merged_text(sheet, row, f"{step.get('number')}  {step.get('text', '')}", 44, body_font)
+            merged_text(
+                sheet,
+                row,
+                f"{step.get('number')}  {step_text(texts, stage_index, step.get('number'), step.get('text', ''))}",
+                44,
+                body_font,
+            )
             row += 1
             settings = step.get("settings") or {}
             if isinstance(settings, dict) and settings:
                 pairs = [
-                    f"{key.replace('_', ' ')} {value}".strip()
-                    for key, value in settings.items()
+                    f"{key} {value}".strip()
+                    for key, value in display_settings(texts, stage_index, step)
                     if str(value).strip()
                 ]
                 if pairs:
                     merged_text(
                         sheet,
                         row,
-                        f"Settings — {'; '.join(pairs)}",
+                        f"{translate('settings.label', language)}{'; '.join(pairs)}",
                         24,
                         note_font,
                     )
                     row += 1
-        tip = stage.get("tip")
+        tip = recipe_field(texts, f"stages.{stage_index}.tip", stage.get("tip"))
         if tip:
-            merged_text(sheet, row, f"Tip — {tip}", 30, note_font)
+            merged_text(sheet, row, f"{translate('tip.label', language)}{tip}", 30, note_font)
             row += 1
         row += 1
 
-    entries = applicable_process_controls(card.process_controls)
+    entries = display_controls(card, texts, language)
     if entries:
-        heading(sheet, row, "PROCESS CONTROLS")
+        heading(sheet, row, translate("xlsx.process_controls", language))
         row += 1
         for label, value in entries:
             merged_text(sheet, row, f"{label} — {value}", 30, body_font)
@@ -768,27 +935,36 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
 
     labeling = card.labeling
     if labeling:
-        heading(sheet, row, "LABELING")
+        heading(sheet, row, translate("xlsx.labeling", language))
         row += 1
         for key in LABELING_KEYS:
-            value = str(labeling.get(key, "")).strip()
+            value = recipe_field(texts, f"labeling.{key}", str(labeling.get(key, "")).strip())
             if value:
-                merged_text(sheet, row, f"{key.replace('_', ' ')} — {value}", 26, body_font)
+                merged_text(
+                    sheet,
+                    row,
+                    f"{translate(f'labeling.{key}', language)} — {value}",
+                    26,
+                    body_font,
+                )
                 row += 1
         row += 1
 
-    for note in card.data.get("notes") or []:
-        heading(sheet, row, str(note.get("heading", "")))
+    for index, note in enumerate(card.data.get("notes") or []):
+        heading_text, note_text_value = note_text(texts, index, note.get("heading", ""), str(note.get("text", "")))
+        heading(sheet, row, heading_text)
         row += 1
-        merged_text(sheet, row, str(note.get("text", "")), 44, body_font)
+        merged_text(sheet, row, note_text_value, 44, body_font)
         row += 2
 
-    checklist = list(card.data.get("release_checklist") or []) or list(card.release_blockers)
+    checklist = display_release(card, texts, checklist=True)
     if checklist:
         heading(
             sheet,
             row,
-            "REQUIRED BEFORE PRODUCTION RELEASE" if not card.is_production else "RELEASE RECORD",
+            translate("heading.release_before", language)
+            if not card.is_production
+            else translate("heading.release_record", language),
         )
         row += 1
         for item in checklist:
@@ -798,12 +974,12 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
 
     provenance = card.data.get("provenance") or {}
     if provenance:
-        heading(sheet, row, "SOURCE & REVISION RECORD")
+        heading(sheet, row, translate("xlsx.source_record", language))
         row += 1
         for label, key in (("Evidence", "evidence"), ("Validation", "validation"), ("Filing", "filing")):
-            value = provenance.get(key)
+            value = recipe_field(texts, f"provenance.{key}", provenance.get(key))
             if value:
-                merged_text(sheet, row, f"{label}: {value}", 30, note_font)
+                merged_text(sheet, row, f"{translate(f'trace.{key}', language)} {value}", 30, note_font)
                 row += 1
         row += 1
 
@@ -812,21 +988,21 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     # printed page and keeps the card's identity visible without an orphan
     # page.
     sheet.oddFooter.center.text = (
-        f"{card.data.get('library_name', '')} · {card.recipe_id} · {card.version} · "
+        f"{recipe_text(texts, 'library_name', card.data.get('library_name', ''))} · {card.recipe_id} · {card.version} · "
         f"{card.status} · Page &P of &N"
     )
     sheet.oddFooter.center.size = 8
     sheet.oddFooter.center.color = "68685F"
     scaling.oddFooter.center.text = (
-        f"{card.data.get('library_name', '')} · {card.recipe_id} · {card.version} · "
+        f"{recipe_text(texts, 'library_name', card.data.get('library_name', ''))} · {card.recipe_id} · {card.version} · "
         "Batch scaling · Page &P of &N"
     )
     scaling.oddFooter.center.size = 8
     scaling.oddFooter.center.color = "68685F"
 
     # ------------------------------------------------------- Batch Scaling
-    merged_text(scaling, 2, "Batch scaling", 40, title_font)
-    merged_text(scaling, 3, f"{card.title} · {card.recipe_id} · {card.version}", 24, meta_font)
+    merged_text(scaling, 2, translate("xlsx.batch_scaling", language), 40, title_font)
+    merged_text(scaling, 3, f"{title} · {card.recipe_id} · {card.version}", 24, meta_font)
     merged_text(
         scaling,
         4,
@@ -836,7 +1012,7 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
             else "Scaling never grants production approval."
         ),
         40,
-        Font(name="Arial", size=11, color="8A3A22"),
+        Font(name="Arial", size=11, color=status_text_c),
         fill=amber,
     )
 
@@ -851,23 +1027,31 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     validation = DataValidation(
         type="decimal", operator="greaterThan", formula1="0", allow_blank=False
     )
-    validation.error = "Enter a positive number."
-    validation.errorTitle = "Invalid input"
-    validation.prompt = "Positive multiplier for ingredient weights only."
-    validation.promptTitle = "Batch factor"
+    validation.error = translate("xlsx.validation.error", language)
+    validation.errorTitle = translate("xlsx.validation.title", language)
+    validation.prompt = translate("xlsx.validation.prompt", language)
+    validation.promptTitle = translate("xlsx.batch_factor", language)
     scaling.add_data_validation(validation)
     validation.add(factor_cell)
 
     merged_text(
         scaling,
         7,
-        "Enter a positive number. Ingredient weights are calculated; process, capacity and yield still require trial validation.",
+        translate("xlsx.batch_note", language),
         38,
         body_font,
     )
 
     scale_header_row = 9
-    for col, text in enumerate(["Ingredient", "Base (g)", "Scaling %", "Scaled (g)"], start=2):
+    for col, text in enumerate(
+        [
+            translate("xlsx.table.ingredient", language),
+            translate("xlsx.table.base", language),
+            translate("xlsx.table.scaling", language),
+            translate("xlsx.table.scaled", language),
+        ],
+        start=2,
+    ):
         cell = scaling.cell(row=scale_header_row, column=col, value=text)
         cell.font = header_font
         cell.border = Border(bottom=thin)
@@ -876,10 +1060,14 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     scale_row = scale_header_row + 1
     scale_first = scale_row
     scale_sum = 0.0
+    base_sum = 0.0
+    scale_ingredient_count = 0
+    scale_established_count = 0
+    scale_base_rows: list[int] = []
     for row_id, card_row in ingredient_rows:
-        ing = card.ingredient(row_id) or {}
+        ing = ingredient_records.get(row_id, {})
         name_cell = scaling.cell(row=scale_row, column=2)
-        _set_text(name_cell, str(ing.get("name", "")))
+        _set_text(name_cell, ing_names.get(row_id, str(ing.get("name", ""))))
         name_cell.font = body_font
         name_cell.alignment = Alignment(wrap_text=True, vertical="center")
 
@@ -892,7 +1080,7 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
             put_formula(
                 base_cell,
                 f"='Recipe Card'!C{card_row}",
-                format_quantity(ing.get("quantity")),
+                format_quantity(ing.get("quantity"), language),
             )
             base_cell.number_format = "General"
             base_cell.font = body_font
@@ -904,9 +1092,15 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
             pct_cell.alignment = Alignment(horizontal="right")
 
             scaled_cell = scaling.cell(row=scale_row, column=5)
-            _set_text(scaled_cell, "Pending")
+            put_formula(
+                scaled_cell,
+                f'=IF(ISNUMBER(C{scale_row}),IF(ISNUMBER($C$6),IF($C$6>0,C{scale_row}*$C$6,"{translate("xlsx.validation.title", language)}"),"{translate("xlsx.validation.title", language)}"),"Pending")',
+                "Pending",
+            )
             scaled_cell.font = body_font
             scaled_cell.alignment = Alignment(horizontal="right")
+            scale_ingredient_count += 1
+            scale_base_rows.append(scale_row)
             scale_row += 1
             continue
 
@@ -925,38 +1119,88 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
             f"='Recipe Card'!E{card_row}",
             cell_values.get(("Recipe Card", f"E{card_row}"), ""),
         )
-        pct_cell.number_format = "0%"
+        pct_cell.number_format = "0.0#########%"
         pct_cell.font = body_font
         pct_cell.alignment = Alignment(horizontal="right")
 
         scaled_cell = scaling.cell(row=scale_row, column=5)
         put_formula(
             scaled_cell,
-            f'=IF(ISNUMBER($C$6),IF($C$6>0,C{scale_row}*$C$6,"Invalid input"),"Invalid input")',
+            f'=IF(ISNUMBER($C$6),IF($C$6>0,C{scale_row}*$C$6,"{translate("xlsx.validation.title", language)}"),"{translate("xlsx.validation.title", language)}")',
             base_weight * float(card.data.get("batch_factor", 1) or 1),
         )
         scaled_cell.number_format = "0.0"
         scaled_cell.font = body_font
         scaled_cell.alignment = Alignment(horizontal="right")
         scale_sum += base_weight * float(card.data.get("batch_factor", 1) or 1)
+        base_sum += base_weight
+        scale_ingredient_count += 1
+        scale_established_count += 1
+        scale_base_rows.append(scale_row)
 
         scale_row += 1
 
+    scale_ingredient_end = scale_row - 1
+    if not card.derived().input_complete:
+        scaling.cell(row=scale_row, column=2,
+                     value=translate("caption.known_input_subtotal", language))
+        put_formula(scaling.cell(row=scale_row, column=3),
+                    f'=SUM(C{scale_first}:C{scale_ingredient_end})', base_sum)
+        put_formula(scaling.cell(row=scale_row, column=5),
+                    f'=IF(AND(ISNUMBER($C$6),$C$6>0),SUM(E{scale_first}:E{scale_ingredient_end}),'
+                    f'"{translate("xlsx.validation.title", language)}")', scale_sum)
+        for column in (3, 5):
+            scaling.cell(row=scale_row, column=column).number_format = "0.0"
+        scale_row += 2
+
+    partial_scaling = (translate("xlsx.partial_scaling", language).format(
+        n=scale_established_count, m=scale_ingredient_count) if input_structure_complete
+        else translate("xlsx.ambiguous_input", language))
     scale_total_row = scale_row
-    scaling.cell(row=scale_total_row, column=2, value="Total input (g)")
+    scaling.cell(row=scale_total_row, column=2, value=translate("xlsx.total_input_g", language))
+    guard = ""
+    if scale_ingredient_count > 0:
+        guard = "AND(" + structure_guard + "," + ",".join(f"ISNUMBER(C{r})" for r in scale_base_rows) + ")"
+        base_formula = (
+            f'=IF({guard},SUM(C{scale_first}:C{scale_ingredient_end}),'
+            f'"{partial_scaling}")'
+        )
+        base_cached: Any = (
+            base_sum
+            if input_structure_complete and scale_established_count == scale_ingredient_count
+            else partial_scaling
+        )
+    else:
+        base_formula = f'"{translate("xlsx.no_scaling", language)}"'
+        base_cached = translate("xlsx.no_scaling", language)
     put_formula(
         scaling.cell(row=scale_total_row, column=3),
-        f"=SUM(C{scale_first}:C{scale_total_row - 1})",
-        scale_sum,
+        base_formula,
+        base_cached,
     )
     scaling.cell(row=scale_total_row, column=3).number_format = "0.0"
+    if scale_ingredient_count > 0:
+        guard = "AND(" + structure_guard + "," + ",".join(f"ISNUMBER(E{r})" for r in scale_base_rows) + ")"
+        e_formula = (
+            f'=IF(AND(ISNUMBER($C$6),{guard}),'
+            f'IF($C$6>0,SUM(E{scale_first}:E{scale_ingredient_end}),"{translate("xlsx.validation.title", language)}"),'
+            f'"{partial_scaling}")'
+        )
+        e_cached: Any = (
+            scale_sum
+            if input_structure_complete and scale_established_count == scale_ingredient_count
+            else partial_scaling
+        )
+    else:
+        e_formula = (
+            '=IF(ISNUMBER($C$6),IF($C$6>0,"No ingredient masses established; '
+            'scaling total incomplete","Invalid input"),"Invalid input")'
+        )
+        e_cached = translate("xlsx.no_scaling", language)
     put_formula(
         scaling.cell(row=scale_total_row, column=5),
-        (
-            f'=IF(ISNUMBER($C$6),IF($C$6>0,SUM(E{scale_first}:E{scale_total_row - 1}),"Invalid input"),'
-            '"Invalid input")'
-        ),
-        scale_sum,
+        e_formula,
+        e_cached,
     )
     scaling.cell(row=scale_total_row, column=5).number_format = "0.0"
     for col in range(2, 6):
@@ -964,42 +1208,49 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
         cell.fill = PatternFill("solid", fgColor=pale)
         cell.border = Border(bottom=thin)
         if col > 2:
-            cell.alignment = Alignment(horizontal="right")
+            cell.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
+    partial_warning = translate("xlsx.partial_scaling", language).format(
+        n=scale_established_count, m=scale_ingredient_count)
+    scaling.row_dimensions[scale_total_row].height = max(
+        wrapped_height(partial_warning, scaling.cell(scale_total_row, 3).font, 3, 3),
+        wrapped_height(partial_warning, scaling.cell(scale_total_row, 5).font, 5, 5),
+        wrapped_height(base_cached, scaling.cell(scale_total_row, 3).font, 3, 3),
+        wrapped_height(e_cached, scaling.cell(scale_total_row, 5).font, 5, 5),
+    )
     scale_row += 2
 
-    heading(scaling, scale_row, "PROCESS LIMITS")
+    heading(scaling, scale_row, translate("xlsx.process_limits", language))
     scale_row += 1
-    tested_range = card.data.get("tested_batch_range")
-    limits = (f"Tested batch range: {tested_range}. " if tested_range else "") + (
+    tested_range = recipe_field(texts, "tested_batch_range", card.data.get("tested_batch_range"))
+    limits = (f"{translate('xlsx.tested_batch_range', language)} {tested_range}. " if tested_range else "") + (
         "Scale ingredient amounts only. Do not scale time, temperature, vessel loading, "
         "mixing, cooling or fermentation automatically. Repeating a tested batch is "
         "different from increasing its load."
     )
-    merged_text(scaling, scale_row, limits, 58, body_font)
+    merged_text(scaling, scale_row, (f"{tested_range}. " if tested_range else "") + translate("xlsx.limits_body", language), 58, body_font)
     scale_row += 1
     merged_text(
         scaling,
         scale_row,
-        "Finished yield must be weighed for every batch. Reference yield and portions below remain "
-        "fixed to the original trial; scaled output is a projection, not a measured yield.",
+        translate("xlsx.yield_note", language),
         38,
         body_font,
     )
     scale_row += 2
 
-    scaling.cell(row=scale_row, column=2, value="Reference usable yield (g)")
+    scaling.cell(row=scale_row, column=2, value=translate("xlsx.ref_yield", language))
     put_formula(
         scaling.cell(row=scale_row, column=3),
-        f"='Recipe Card'!C{yield_row}",
+        f"=IF(ISNUMBER('Recipe Card'!C{yield_row}),'Recipe Card'!C{yield_row},\"\")",
         cell_values.get(("Recipe Card", f"C{yield_row}"), ""),
     )
     scaling.cell(row=scale_row, column=3).number_format = "0.0"
     scale_row += 1
-    scaling.cell(row=scale_row, column=2, value="Reference portion weight (g)")
+    scaling.cell(row=scale_row, column=2, value=translate("xlsx.ref_portion", language))
     put(scaling.cell(row=scale_row, column=3), card.data.get("portion_g"))
     scaling.cell(row=scale_row, column=3).number_format = "0.0"
     scale_row += 1
-    scaling.cell(row=scale_row, column=2, value="Reference complete portions")
+    scaling.cell(row=scale_row, column=2, value=translate("xlsx.ref_portions", language))
     put_formula(
         scaling.cell(row=scale_row, column=3),
         f"='Recipe Card'!E{yield_row + 1}",
@@ -1010,8 +1261,7 @@ def export_xlsx(card: Card, out_path: Path) -> ExportResult:
     merged_text(
         scaling,
         scale_row,
-        "Source quantities: Recipe Card. Amber cell is editable. Blank, zero, negative and text "
-        "multipliers produce “Invalid input”.",
+        translate("xlsx.source_quantities", language),
         44,
         note_font,
     )

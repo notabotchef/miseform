@@ -216,3 +216,29 @@ Evidence: `runs/stale-copy-findings/opencode-fake-pdf-placeholder.txt`.
   follows the Agent Skills specification. What this document records is
   which of the four named hosts were exercised on this machine, and what
   they did.
+
+
+## November 5 candidate repair — activation failure preserved
+
+A fresh Hermes CLI invocation with `-s miseform`, raw chef recipe text and no prepared card record failed before intake on the first updated installation. Model announced by the CLI: MiniMax-M3. Exact error:
+
+    Error: Ambiguous skill name miseform: use one of miseform/.miseform-backups/<previous-content-hash>
+
+The installer had preserved a previous `SKILL.md` inside its destination skill tree. Recursive host discovery treated the backup as another skill. This is an installer defect, not successful activation or recipe execution. Source/installed owned-file parity alone did not detect discovery ambiguity. Installer repair moves backups outside host discovery roots and preserves legacy backup contents. A subsequent real host trial is still required; static upgrade tests cannot turn this failed run into a pass. Private source and transcript remain outside the public package. Coordinator-authored bespoke cabbage exports are excluded from skill acceptance evidence.
+
+
+## November 6 coordination wave — partial evidence, release still open
+
+After the discovery repair, five bounded Hermes MiniMax-M3 fresh-intake trials failed to complete the bundled scaffold/build path. An isolated existing-card correction task was also stopped after five minutes without a revised artifact. These failures remain failures; deterministic export tests cannot certify this host's recipe-authoring behavior. Exact-command Hermes regression jobs did succeed: 35 filing checks and 65 volume checks, both with saved exit-zero receipts.
+
+A fresh Codex collaboration worker, with no inherited conversation or prepared card, received only the installed skill, a synthetic written-recipe photo and a request for a local PDF/Excel draft. It transcribed all eight ingredient rows, used the installed scaffold/research/build commands and produced a two-page PDF and native XLSX. Source quantities and null measured yield were retained. The PDF was visually inspected and the workbook ZIP/XML read back. This is a Codex collaboration-worker result, not a fresh Codex CLI or Hermes-host certification.
+
+The worker then received a separate formula/component correction. It preserved the original outputs, revised the affected quantities, component membership, percentages and method, rebound the ledger and rebuilt both formats. This establishes correction-resume artifact evidence for that worker. It does not establish an actual spreadsheet-application edit/recalculation session, missing-capability behavior, every recipe class or token savings.
+
+Independent AGY review accepted source fidelity and local draft-export evidence but rejected useful standardized-draft completeness. Routine roasting setting/cut proposals remained unresolved despite a cited comparable recipe; only one of eight secondary volumes was derived. The claimed 90-percent applicable-field threshold is not established. Zero card/workflow findings prove neither semantic completeness nor production approval. The source of each review claim still requires coordinator verification; the reviewer itself ran no export tools.
+
+Both source repairs in this wave received regression tests and independent Python review: derived volumes are refreshed after corrections, and PDF mass verification no longer accepts an ingredient-word prefix as a gram unit. The full source suite reported 630 passed before this documentation addition. Canonical source and both installed copies were reconciled using the bundled installer. Trial images, recipes, command traces and review receipts remain outside the shareable package. No publication or production approval is claimed.
+
+AGY subsequently identified a concrete instruction conflict: the entrypoint required proposed methods while a later paragraph excluded unconfirmed estimates from methods. A scoped clarification now allows cited routine settings in unreleased proposed steps and distinguishes appliance setpoints from validated safety-critical thermal controls in the two reference lists. Independent contract review approved the distinction; this documentation review alone does not establish improved host behavior.
+
+A subsequent, genuinely new cold-vinaigrette collaboration trial used the revised contract and seven live search/fetch operations. All four supplied ingredient masses were preserved and all four secondary volumes were derived from checked published chart rows. The proposed endpoint-led method, native PDF/XLSX and null usable yield received scoped AGY draft acceptance; a separate Hermes job verified actual artifact hashes, PDF masses and workbook cached weights/percentages. Production, aggregate 90-percent readiness, native spreadsheet-application recalculation and host/efficiency certification remain unproven. The author disclosed reading the synthetic source catalogue solely for field names, so the strict no-filled-example restriction was not fully met. The guide now documents required and optional catalogue fields directly, avoiding that setup detour; no synthetic ratios were adopted.

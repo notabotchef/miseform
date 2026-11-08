@@ -47,7 +47,7 @@ EXAMPLE = ROOT / "examples" / "sesame-salt-garnish.card.json"
 @pytest.fixture()
 def sources():
     """The synthetic example catalogue the engine ships with."""
-    return load_sources()
+    return load_sources(volume_research.SOURCES_PATH)
 
 
 def base_card() -> dict:
@@ -561,7 +561,7 @@ def test_a_measured_volume_is_not_scaled():
 # ------------------------------------------------ linked components
 
 
-def test_a_linked_component_is_not_restated_or_counted_twice():
+def test_a_linked_allocation_adds_mass_once_without_restating_formula():
     data = base_card()
     data["components"].append(
         {
@@ -572,7 +572,10 @@ def test_a_linked_component_is_not_restated_or_counted_twice():
     card = Card(data)
 
     assert len(card.linked_components) == 1
-    assert card.derived().input_total_g == pytest.approx(100.0)
+    # Direct 100 g plus the 250 g allocation; external formula stays external.
+    assert card.derived().input_total_g == pytest.approx(350.0)
+    assert card.derived().component_totals["Shared sauce"] == 250
+    assert card.derived().input_complete
     assert "linked-version-missing" not in codes(card)
     assert "linked-component-duplicated" not in codes(card)
 
@@ -849,3 +852,117 @@ def test_a_formula_row_with_no_stated_weight_is_researched_from_its_formula_mass
     assert row_b["volume_source"]["status"] == "derived"
     assert row_b["volume"].startswith("≈ ")
     assert any(a["outcome"] == "accepted" for a in row_b["volume_source"]["attempts"])
+
+
+def test_default_catalogue_never_promotes_shipped_synthetic_sources():
+    assert load_sources() == []
+    result = research_volume('fine salt', 2)
+    assert result.status == 'unresolved'
+    assert result.volume is None
+
+
+def test_default_research_rejects_polluted_synthetic_cache(tmp_path: Path, sources):
+    cache = SourceCache(tmp_path / 'cache.json')
+    seeded = research_volume('fine salt', 2, sources=sources, cache=cache)
+    assert seeded.status == 'derived'  # explicit arithmetic fixture opt-in
+    cache.save()
+    polluted = SourceCache(tmp_path / 'cache.json')
+    result = research_volume('fine salt', 2, cache=polluted)
+    assert result.status == 'unresolved'
+    assert result.volume is None
+
+
+def test_explicit_real_catalogue_beats_polluted_synthetic_cache(tmp_path: Path, sources):
+    from dataclasses import replace
+    cache = SourceCache(tmp_path / 'cache.json')
+    research_volume('fine salt', 2, sources=sources, cache=cache)
+    salt = next(source for source in sources if source.ingredient == 'salt' and source.state == 'table salt')
+    checked = replace(salt, url='https://fdc.nal.usda.gov/food-details/173468/nutrients', title='Salt, table')
+    result = research_volume('fine salt', 2, sources=[checked], cache=cache)
+    assert result.status == 'derived'
+    assert result.provenance['source_url'] == checked.url
+    assert 'example.invalid' not in result.provenance['source_url']
+
+
+def test_checked_cache_remains_reusable_without_a_catalogue(tmp_path: Path, sources):
+    from dataclasses import replace
+    salt = next(source for source in sources if source.ingredient == 'salt' and source.state == 'table salt')
+    checked = replace(salt, url='https://fdc.nal.usda.gov/food-details/173468/nutrients', title='Salt, table')
+    cache = SourceCache(tmp_path / 'cache.json')
+    assert research_volume('fine salt', 2, sources=[checked], cache=cache).status == 'derived'
+    reused = research_volume('fine salt', 2, cache=cache)
+    assert reused.status == 'derived'
+    assert reused.provenance['source_url'] == checked.url
+
+
+def test_old_synthetic_derived_volume_is_not_kept_by_default(sources):
+    data, _ = apply_research(base_card(), sources=sources)
+    assert data['components'][0]['ingredients'][0]['volume_source']['status'] == 'derived'
+    updated, records = apply_research(data)
+    row = updated['components'][0]['ingredients'][0]
+    assert row.get('volume') is None
+    assert row['volume_source']['status'] == 'unresolved'
+    assert records
+
+
+def test_measured_volume_survives_missing_catalogue():
+    data = base_card()
+    row = data['components'][0]['ingredients'][0]
+    row['volume'] = '1 scoop (chef measured)'
+    row['volume_source'] = {'status': 'measured', 'source_title': 'Chef measured'}
+    updated, records = apply_research(data)
+    assert updated['components'][0]['ingredients'][0]['volume'] == '1 scoop (chef measured)'
+    assert not records
+
+
+@pytest.mark.parametrize('host', ['fixtures.example.com', 'chart.example.org', 'data.example.net'])
+def test_example_subdomains_never_escape_cache_or_existing_row_guard(tmp_path: Path, sources, host):
+    from dataclasses import replace
+    salt = next(source for source in sources if source.ingredient == 'salt' and source.state == 'table salt')
+    fixture = replace(salt, url=f'https://{host}/salt', title='Salt chart')
+    cache = SourceCache(tmp_path / 'cache.json')
+    assert research_volume('fine salt', 2, sources=[fixture], cache=cache).status == 'derived'
+    assert research_volume('fine salt', 2, cache=cache).status == 'unresolved'
+    data = base_card()
+    data['components'][0]['ingredients'][0] = {'row_id': 'I1', 'name': 'fine salt', 'weight_g': 2}
+    seeded, _ = apply_research(data, sources=[fixture])
+    assert seeded['components'][0]['ingredients'][0]['volume_source']['status'] == 'derived'
+    updated, _ = apply_research(seeded)
+    assert updated['components'][0]['ingredients'][0]['volume_source']['status'] == 'unresolved'
+    assert updated['components'][0]['ingredients'][0].get('volume') is None
+
+
+def test_malformed_cache_url_is_rejected_and_checked_catalogue_recovers(tmp_path: Path, sources):
+    from dataclasses import replace
+    salt = next(source for source in sources if source.ingredient == 'salt' and source.state == 'table salt')
+    checked = replace(salt, url='https://fdc.nal.usda.gov/food-details/173468/nutrients', title='Salt, table')
+    cache = SourceCache(tmp_path / 'cache.json')
+    cache.put('fine salt', None, None, {**checked.__dict__, 'url': 'https://[bad/salt'})
+    assert research_volume('fine salt', 2, cache=cache).status == 'unresolved'
+    result = research_volume('fine salt', 2, sources=[checked], cache=cache)
+    assert result.status == 'derived' and result.provenance['source_url'] == checked.url
+    assert research_volume('fine salt', 2, sources=[replace(checked, url='https://[bad/salt')]).status == 'unresolved'
+
+
+def test_malformed_prior_derived_url_is_withdrawn():
+    data = base_card()
+    row = data['components'][0]['ingredients'][0]
+    row['volume'] = '0.33 tsp (US)'
+    row['volume_source'] = {'status': 'derived', 'source_url': 'https://[bad/salt', 'source_title': 'Salt chart'}
+    updated, _ = apply_research(data)
+    assert updated['components'][0]['ingredients'][0].get('volume') is None
+    assert updated['components'][0]['ingredients'][0]['volume_source']['status'] == 'unresolved'
+
+
+def test_matching_explicit_malformed_source_cannot_preserve_prior_derivation(sources):
+    from dataclasses import replace
+    salt = next(source for source in sources if source.ingredient == 'salt' and source.state == 'table salt')
+    invalid = replace(salt, url='https://[bad/salt', title='Salt chart')
+    data = base_card()
+    row = data['components'][0]['ingredients'][0]
+    row['volume'] = '0.33 tsp (US)'
+    row['volume_source'] = {'status': 'derived', 'source_url': invalid.url, 'source_title': invalid.title}
+    updated, records = apply_research(data, sources=[invalid])
+    assert updated['components'][0]['ingredients'][0].get('volume') is None
+    assert updated['components'][0]['ingredients'][0]['volume_source']['status'] == 'unresolved'
+    assert records
