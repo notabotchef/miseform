@@ -148,7 +148,8 @@ def displays_nonzero(value: object, number_format: str) -> bool:
     if not isinstance(value, (int, float)) or isinstance(value, bool) or value == 0:
         return False
     decimals = len(f"{float(value):.10f}".rstrip("0").split(".")[1])
-    _, _, fraction = number_format.partition(".")
+    section = painted_section(number_format, value)
+    _, _, fraction = section.partition(".")
     return fraction.count("#") >= decimals
 
 
@@ -176,10 +177,60 @@ def shown_number(text: str, label: str) -> float:
     return float(match.group(1).replace(",", "."))
 
 
-def decimal_places(number_format: str) -> int:
-    """The decimal places a number format paints."""
-    _, _, fraction = number_format.partition(".")
-    return len(fraction)
+def _condition_holds(condition: str, value: object) -> bool:
+    """True when ``value`` satisfies a number format condition."""
+    match = re.match(r"^\s*(<=|>=|<|>)?\s*(-?[0-9.eE+-]+)\s*$", condition)
+    if match is None:
+        return False
+    operator = match.group(1) or "="
+    bound = float(match.group(2))
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    number = float(value)
+    if operator == "<":
+        return number < bound
+    if operator == "<=":
+        return number <= bound
+    if operator == ">":
+        return number > bound
+    if operator == ">=":
+        return number >= bound
+    return number == bound
+
+
+def painted_section(number_format: str, value: object) -> str:
+    """The part of a number format that paints ``value``.
+
+    A conditional number format carries one section per condition, and the
+    sheet picks the section whose condition the cell's value satisfies. A
+    formula cell's section is chosen from the value the formula computes,
+    so the section that matters is the one the computed value selects.
+    """
+    sections = number_format.split(";")
+    if not sections[0].startswith("["):
+        return number_format
+    for section in sections:
+        condition, _, body = section.partition("]")
+        if body and _condition_holds(condition[1:], value):
+            return body
+    return sections[-1]
+
+
+def decimal_places(number_format: str, value: object = None) -> int:
+    """The decimal places a number format paints for ``value``.
+
+    A format's fraction can carry literal text after the digits - a
+    percent sign, a unit - and that text is not a decimal place.
+    """
+    section = painted_section(number_format, value)
+    _, _, fraction = section.partition(".")
+    places = 0
+    for character in fraction:
+        if character in "0#":
+            places += 1
+        else:
+            break
+    return places
 
 
 def displayed_numbers(text: str) -> set[str]:
@@ -294,6 +345,10 @@ def test_the_print_and_the_workbook_show_one_number_for_one_mass(tmp_path):
     assert "33.333333" not in print_text
     assert not printed_as_zero(print_text)
 
+    print_pdf = tmp_path / "print.pdf"
+    assert export_pdf(card, print_pdf).ok
+    print_text = extract_pdf_text(print_pdf)
+
     workbook = tmp_path / "parity.xlsx"
     assert export_xlsx(card, workbook).ok
     book = openpyxl.load_workbook(workbook)
@@ -301,6 +356,7 @@ def test_the_print_and_the_workbook_show_one_number_for_one_mass(tmp_path):
     salt = next(row for row in sheet.iter_rows() if row[1].value == "i2 · Salt")
     yeast = next(row for row in sheet.iter_rows() if row[1].value == "i3 · Instant yeast")
     total = next(row for row in sheet.iter_rows() if row[1].value == "Total input")
+    total_value = 500.0 + 33.333333 + 0.04
 
     # The stored value keeps every digit the cook entered. Only what a
     # reader sees is rounded.
@@ -311,9 +367,12 @@ def test_the_print_and_the_workbook_show_one_number_for_one_mass(tmp_path):
     # mass: one decimal for a mass of a tenth of a gram or more, the
     # stored precision for a smaller one. The total is a formula cell
     # and is held to the same rule.
-    assert decimal_places(salt[2].number_format) == 1
-    assert decimal_places(yeast[2].number_format) == 2
-    assert decimal_places(total[2].number_format) == 1
+    assert decimal_places(salt[2].number_format, salt[2].value) == 1
+    assert decimal_places(yeast[2].number_format, yeast[2].value) == 19
+    # A formula cell's section is chosen from the value the formula
+    # computes, so the total is judged on that value, not on the formula
+    # text it holds.
+    assert decimal_places(total[2].number_format, total_value) == 1
     assert displays_nonzero(yeast[2].value, yeast[2].number_format)
 
     soffice = _find_soffice()
@@ -500,3 +559,169 @@ def test_the_workbook_names_a_total_it_refuses_to_recalculate(tmp_path):
         declared=format_weight(530), sum=format_weight(510)
     )
     assert note in text
+
+
+def test_the_scaling_percentage_is_one_number_in_every_edition(tmp_path):
+    """A percentage reads the same in the PDF and in the workbook.
+
+    The workbook holds a ratio and its number format multiplies by a
+    hundred at display time; the print holds percentage points. The two
+    are the same percentage in different scales, and the editions must
+    show the same number for the same ingredient.
+
+    The percentage cell is a formula cell, so its number format has to be
+    conditional: a spreadsheet chooses the section from the value the
+    formula computes. A fixed format paints the raw ratio and the two
+    editions drift apart by a factor of a hundred.
+    """
+    import openpyxl
+
+    card = synthetic_card(
+        salt_g=33.333333,
+        yeast_g=0.04,
+        loss_g=None,
+        percentage_basis={
+            "basis_label": "Synthetic basis = 100% = 500 g.",
+            "reference_row_id": "i1",
+            "reference_weight_g": 500,
+        },
+    )
+    assert card.schema_errors() == []
+
+    print_pdf = tmp_path / "print.pdf"
+    assert export_pdf(card, print_pdf).ok
+    print_text = extract_pdf_text(print_pdf)
+
+    workbook = tmp_path / "parity.xlsx"
+    assert export_xlsx(card, workbook).ok
+    book = openpyxl.load_workbook(workbook)
+    sheet = book["Recipe Card"]
+    salt = next(row for row in sheet.iter_rows() if row[1].value == "i2 · Salt")
+
+    # The percentage cell is the fifth column of the ingredient row.
+    percent_cell = salt[4]
+    number_format = percent_cell.number_format
+    assert number_format.startswith("[<0.001]"), number_format
+    assert "[>=0.001]" in number_format, number_format
+
+    # The sheet's cell holds a ratio, so the section it paints is chosen
+    # from that ratio: 33.333333 g against a 500 g basis is 0.0666666...,
+    # which is at or above the threshold and so reads at one decimal.
+    ratio = float(salt[2].value) / 500.0
+    assert ratio >= 0.001
+    assert painted_section(number_format, ratio).endswith("%")
+
+    # A ratio at or above the threshold reads at one decimal, the way the
+    # print reads a percentage at or above a tenth of a percentage point.
+    # A ratio below it keeps its own digits, so a tiny percentage never
+    # reads as zero.
+    assert decimal_places(number_format, 0.5) == 1
+    assert decimal_places(number_format, 0.0008) == 13
+
+    soffice = _find_soffice()
+    if soffice is not None:
+        run = subprocess.run(
+            [
+                str(soffice),
+                "-env:UserInstallation=" + (tmp_path / "profile").as_uri(),
+                "--headless",
+                "--norestore",
+                "--convert-to",
+                "pdf:calc_pdf_Export",
+                "--outdir",
+                str(tmp_path),
+                str(workbook),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+        assert run.returncode == 0, run.stderr
+        assert run.returncode == 0, run.stderr
+        rendered = extract_pdf_text(tmp_path / "parity.pdf")
+        # 33.333333 g of salt against a 500 g basis is 6.7%. The workbook
+        # must not paint the raw ratio, and must not paint 6.6666666%.
+        # The text layer is read here rather than through displayed_numbers,
+        # because that helper strips the percent sign off a number.
+        assert "6.7%" in rendered, rendered[:2000]
+        assert "6.6666666%" not in rendered, rendered[:2000]
+        # And the print edition says the same thing about the same mass.
+        assert "6.7%" in print_text, print_text[:2000]
+        assert "6.6666666%" not in print_text, print_text[:2000]
+
+
+def test_a_nonzero_weight_never_reads_as_zero(tmp_path):
+    """A mass below a nanogram is still a mass, and still reads as one.
+
+    The integrality test that decides whether a mass is a whole number of
+    grams must be exact. A tolerance swallows every small mass and prints
+    it as zero, which is the one reading a potent ingredient must never
+    get.
+    """
+    for value in (5e-10, 1e-11, 1e-13):
+        printed = format_weight(value)
+        assert printed != "0 g", (value, printed)
+        assert float(printed.split(" ")[0]) != 0.0, (value, printed)
+
+    card = synthetic_card(salt_g=10, yeast_g=5e-10, loss_g=None)
+    assert card.schema_errors() == []
+    print_pdf = tmp_path / "print.pdf"
+    assert export_pdf(card, print_pdf).ok
+    print_text = extract_pdf_text(print_pdf)
+    assert not printed_as_zero(print_text)
+
+
+def test_a_live_formula_cell_paints_the_mass_it_computes(tmp_path):
+    """A formula cell's format follows the value the formula computes.
+
+    The workbook is a working document: a cook edits an ingredient and the
+    total recalculates. The number format cannot be frozen at write time,
+    because a frozen format paints the new total with the old rule - and
+    a mass of 0.04 g under a one-decimal format reads as 0.0 g.
+
+    Every gram cell therefore carries the same conditional format, and a
+    spreadsheet chooses its section from the value the cell computes.
+    """
+    import openpyxl
+
+    card = synthetic_card(salt_g=33.333333, yeast_g=0.04, loss_g=None)
+    assert card.schema_errors() == []
+
+    workbook = tmp_path / "formula.xlsx"
+    assert export_xlsx(card, workbook).ok
+    book = openpyxl.load_workbook(workbook)
+    sheet = book["Recipe Card"]
+
+    total = next(row for row in sheet.iter_rows() if row[1].value == "Total input")
+    # The total is a formula cell, so its format is the one conditional
+    # format every gram cell carries.
+    assert total[2].number_format.startswith("[<0.1]"), total[2].number_format
+    assert "[>=0.1]" in total[2].number_format, total[2].number_format
+
+    # The render is checked when the host has LibreOffice. The check above
+    # stands on its own, so this test never skips: a skipped test would
+    # leave the defect unguarded on the hosts that need it most.
+    soffice = _find_soffice()
+    if soffice is not None:
+
+        run = subprocess.run(
+            [
+                str(soffice),
+                "-env:UserInstallation=" + (tmp_path / "profile").as_uri(),
+                "--headless",
+                "--norestore",
+                "--convert-to",
+                "pdf:calc_pdf_Export",
+                "--outdir",
+                str(tmp_path),
+                str(workbook),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+        assert run.returncode == 0, run.stderr
+        numbers = displayed_numbers(extract_pdf_text(tmp_path / "formula.pdf"))
+        assert "533.4" in numbers, sorted(numbers)

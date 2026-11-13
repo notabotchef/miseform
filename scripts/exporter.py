@@ -69,29 +69,20 @@ CHROME_CANDIDATES = [
 ]
 
 
-# A gram cell carries the number format that paints its mass the way the
-# print shows it. The format is chosen per cell, because the threshold
-# depends on the mass the cell holds and no single format can express it.
-def gram_format(value: Any) -> str:
-    """Return the number format that paints this mass as the print shows it.
-
-    A mass of a tenth of a gram or more reads at one decimal - the scale a
-    kitchen reads - so the cell carries one decimal place. A smaller mass
-    is a potent ingredient whose stored precision the print keeps, so the
-    cell carries exactly as many optional decimal places as that number
-    has digits. The sheet then paints the same digits the PDF prints, and
-    never paints a real mass as zero.
-    """
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        # The cell holds a status instead of a mass, so it paints no number
-        # now. A mass of a tenth of a gram or more is the common case if
-        # the workbook recalculates the cell into one.
-        return "0.0"
-    mass = float(value)
-    if mass == 0 or abs(mass) >= 0.1:
-        return "0.0"
-    places = len(weight_display(mass).partition(".")[2])
-    return "0." + "#" * places
+# Every gram cell in the workbook carries ONE number format, and every
+# percentage cell carries its own. Both are conditional, so the branch is
+# chosen from the cell's computed value at recalculation time.
+#
+# A mass of a tenth of a gram or more reads at one decimal, which is the
+# scale a kitchen reads. A smaller mass keeps its stored precision, so a
+# potent ingredient never reads as zero.
+#
+# The reading editions are bounded by the same depths, so the PDF and the
+# workbook show the same digits for the same mass. The format strings stay
+# short on purpose: a very long one makes Calc drop the percent sign and
+# paint the bare ratio instead of the percentage.
+MASS_FORMAT = "[<0.1]" + "0.0" + "#" * 18 + ";[>=0.1]0.0"
+PERCENT_FORMAT = "[<0.001]" + "0.0" + "#" * 12 + "%;[>=0.001]0.0%"
 
 
 PDF_FORMAT_A4 = "A4"
@@ -746,7 +737,7 @@ def export_xlsx(
             weight = resolved.get(row_id)
             if isinstance(weight, (int, float)):
                 put(weight_cell, float(weight))
-                weight_cell.number_format = gram_format(weight)
+                weight_cell.number_format = MASS_FORMAT
                 row_weights[ing_row] = float(weight)
                 weight_sum += float(weight)
             else:
@@ -791,7 +782,7 @@ def export_xlsx(
                     if ref_weight and ing_row in row_weights
                     else "",
                 )
-                pct_cell.number_format = "0.0#########%"
+                pct_cell.number_format = PERCENT_FORMAT
                 pct_cell.font = body_font
                 pct_cell.alignment = Alignment(horizontal="right")
 
@@ -861,9 +852,7 @@ def export_xlsx(
     # The total cell holds a mass when the input is complete and a status
     # when it is not. The format comes from the number the cell holds, so
     # the sheet paints the total the way the print shows it.
-    sheet.cell(row=total_row, column=3).number_format = gram_format(
-        total_cached if isinstance(total_cached, (int, float)) else weight_sum
-    )
+    sheet.cell(row=total_row, column=3).number_format = MASS_FORMAT
     sheet.cell(row=total_row, column=4, value="—")
     for col in range(2, 6):
         cell = sheet.cell(row=total_row, column=col)
@@ -886,7 +875,7 @@ def export_xlsx(
         sheet.cell(row=row, column=2, value=translate("caption.known_input_subtotal", language))
         put_formula(sheet.cell(row=row, column=3),
                     f'=SUM(C{first_data_row}:C{total_row - 1})', weight_sum)
-        sheet.cell(row=row, column=3).number_format = gram_format(weight_sum)
+        sheet.cell(row=row, column=3).number_format = MASS_FORMAT
         row += 2
     caption_note = translate("xlsx.caption_note", language).format(
         basis=basis_label,
@@ -909,7 +898,7 @@ def export_xlsx(
     usable_yield = card.data.get("usable_yield_g")
     sheet.cell(row=row, column=2, value=translate("xlsx.yield_g", language))
     put(sheet.cell(row=row, column=3), usable_yield)
-    sheet.cell(row=row, column=3).number_format = gram_format(usable_yield)
+    sheet.cell(row=row, column=3).number_format = MASS_FORMAT
     sheet.cell(row=row, column=4, value=translate("xlsx.loss_g", language))
     # The loss is honest only when the input total itself is complete: with
     # an incomplete total, subtracting the yield would report a fabricated
@@ -932,10 +921,7 @@ def export_xlsx(
     # when it is not. Its format comes from the number it holds; with an
     # incomplete total the established subtotal minus the yield is the best
     # estimate of the mass the cell will show once the input is complete.
-    sheet.cell(row=row, column=5).number_format = gram_format(
-        loss_cached if isinstance(loss_cached, (int, float))
-        else (weight_sum - float(usable_yield) if usable_yield is not None else "")
-    )
+    sheet.cell(row=row, column=5).number_format = MASS_FORMAT
     yield_row = row
     for col in (2, 3, 4, 5):
         sheet.cell(row=row, column=col).font = body_font
@@ -944,7 +930,7 @@ def export_xlsx(
     portion_g = card.data.get("portion_g")
     sheet.cell(row=row, column=2, value=translate("xlsx.portion_g", language))
     put(sheet.cell(row=row, column=3), portion_g)
-    sheet.cell(row=row, column=3).number_format = gram_format(portion_g)
+    sheet.cell(row=row, column=3).number_format = MASS_FORMAT
     sheet.cell(row=row, column=4, value=translate("xlsx.complete_portions", language))
     complete_portions = (
         int(math.floor(float(usable_yield) / float(portion_g)))
@@ -1188,7 +1174,7 @@ def export_xlsx(
             f"='Recipe Card'!C{card_row}",
             base_weight,
         )
-        base_cell.number_format = gram_format(base_weight)
+        base_cell.number_format = MASS_FORMAT
         base_cell.font = body_font
         base_cell.alignment = Alignment(horizontal="right")
 
@@ -1198,7 +1184,7 @@ def export_xlsx(
             f"='Recipe Card'!E{card_row}",
             cell_values.get(("Recipe Card", f"E{card_row}"), ""),
         )
-        pct_cell.number_format = "0.0#########%"
+        pct_cell.number_format = PERCENT_FORMAT
         pct_cell.font = body_font
         pct_cell.alignment = Alignment(horizontal="right")
 
@@ -1209,7 +1195,7 @@ def export_xlsx(
             f'=IF(ISNUMBER($C$6),IF($C$6>0,C{scale_row}*$C$6,"{translate("xlsx.validation.title", language)}"),"{translate("xlsx.validation.title", language)}")',
             scaled_mass,
         )
-        scaled_cell.number_format = gram_format(scaled_mass)
+        scaled_cell.number_format = MASS_FORMAT
         scaled_cell.font = body_font
         scaled_cell.alignment = Alignment(horizontal="right")
         scale_sum += scaled_mass
@@ -1230,9 +1216,7 @@ def export_xlsx(
                     f'=IF(AND(ISNUMBER($C$6),$C$6>0),SUM(E{scale_first}:E{scale_ingredient_end}),'
                     f'"{translate("xlsx.validation.title", language)}")', scale_sum)
         for column in (3, 5):
-            scaling.cell(row=scale_row, column=column).number_format = gram_format(
-                base_sum if column == 3 else scale_sum
-            )
+            scaling.cell(row=scale_row, column=column).number_format = MASS_FORMAT
         scale_row += 2
 
     partial_scaling = (translate("xlsx.partial_scaling", language).format(
@@ -1260,9 +1244,7 @@ def export_xlsx(
         base_formula,
         base_cached,
     )
-    scaling.cell(row=scale_total_row, column=3).number_format = gram_format(
-        base_cached if isinstance(base_cached, (int, float)) else base_sum
-    )
+    scaling.cell(row=scale_total_row, column=3).number_format = MASS_FORMAT
     if scale_ingredient_count > 0:
         guard = "AND(" + structure_guard + "," + ",".join(f"ISNUMBER(E{r})" for r in scale_base_rows) + ")"
         e_formula = (
@@ -1286,9 +1268,7 @@ def export_xlsx(
         e_formula,
         e_cached,
     )
-    scaling.cell(row=scale_total_row, column=5).number_format = gram_format(
-        e_cached if isinstance(e_cached, (int, float)) else scale_sum
-    )
+    scaling.cell(row=scale_total_row, column=5).number_format = MASS_FORMAT
     if disputed_total is not None:
         # The card states a total and the ingredient weights add up to another
         # one. The Recipe Card sheet shows the stated total, so this sheet
@@ -1352,11 +1332,11 @@ def export_xlsx(
         f"=IF(ISNUMBER('Recipe Card'!C{yield_row}),'Recipe Card'!C{yield_row},\"\")",
         ref_yield_cached,
     )
-    scaling.cell(row=scale_row, column=3).number_format = gram_format(ref_yield_cached)
+    scaling.cell(row=scale_row, column=3).number_format = MASS_FORMAT
     scale_row += 1
     scaling.cell(row=scale_row, column=2, value=translate("xlsx.ref_portion", language))
     put(scaling.cell(row=scale_row, column=3), card.data.get("portion_g"))
-    scaling.cell(row=scale_row, column=3).number_format = gram_format(card.data.get("portion_g"))
+    scaling.cell(row=scale_row, column=3).number_format = MASS_FORMAT
     scale_row += 1
     scaling.cell(row=scale_row, column=2, value=translate("xlsx.ref_portions", language))
     put_formula(

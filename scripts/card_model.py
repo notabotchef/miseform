@@ -1220,6 +1220,35 @@ def _significant_places(value: float) -> int:
     return max(1, 6 - (exponent + 1))
 
 
+# The depth each column's workbook number format can paint, in decimal
+# places. The reading editions are bounded by the same numbers so the two
+# sides of a card show the same digits for the same mass.
+MASS_FORMAT_DEPTH = 19
+PERCENT_FORMAT_DEPTH = 13
+
+
+def _stored_spelling(value: float, depth: int) -> str:
+    """Return a value's own decimal spelling, bounded to ``depth`` places.
+
+    A real nonzero number never becomes zero here, and the result carries
+    no scientific notation and no floating-point noise: the value is first
+    carried through the fifteen significant digits a spreadsheet keeps.
+    """
+    from decimal import Decimal
+    number = Decimal(f"{value:.15g}")
+    if number == 0:
+        # The value is smaller than the significant-digit bound. Use its own
+        # spelling rather than round it away.
+        number = Decimal(repr(value))
+    text = format(number, "f")
+    if "." in text:
+        whole, fraction = text.split(".", 1)
+        fraction = fraction[:depth]
+        fraction = fraction.rstrip("0")
+        text = f"{whole}.{fraction}" if fraction else whole
+    return text
+
+
 def weight_display(value: float) -> str:
     """Return the number a reader sees for a weight, without its unit.
 
@@ -1236,32 +1265,32 @@ def weight_display(value: float) -> str:
     rounds that way. Rounding the print the same way is what keeps the
     PDF and the workbook from disagreeing about the last digit.
     """
-    if abs(value - round(value)) < 1e-9:
-        return f"{int(round(value))}"
     from decimal import Decimal, ROUND_HALF_UP
-    if abs(value) < 0.1:
-        # A real nonzero weight must not become zero at display precision.
-        # The decimal form of the stored spelling avoids both fixed-place
-        # truncation and scientific notation, and the significant-figure
-        # bound keeps a stored value from becoming a wall of digits.
-        places = _significant_places(value)
-        number = format(
-            Decimal(repr(float(value))).quantize(
-                Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP
-            ),
-            "f",
+    if value == int(value):
+        # The integrality test is exact on purpose. A tolerance here would
+        # swallow every mass below a nanogram and print it as zero, which is
+        # the one thing a potent ingredient must never read as.
+        return f"{int(value)}"
+    if value >= 0.1:
+        # A mass of a tenth of a gram or more reads at one decimal, which
+        # is the scale a kitchen reads. The branch tests the value itself,
+        # not its absolute value, because the workbook's number format
+        # branches the same way.
+        #
+        # The rounding is half away from zero on the decimal spelling, and
+        # the value is first carried through the fifteen significant digits
+        # a spreadsheet keeps. A spreadsheet rounds that way, so this is
+        # what makes the PDF and the workbook agree on the last digit.
+        rounded = Decimal(f"{value:.15g}").quantize(
+            Decimal("0.1"), rounding=ROUND_HALF_UP
         )
-        if "." in number:
-            number = number.rstrip("0").rstrip(".")
-        if float(number) == 0.0:
-            # The stored weight is smaller than the display bound. Print it
-            # exactly rather than round it away.
-            number = format(Decimal(str(value)), "f")
-        return number
-    return format(
-        Decimal(repr(float(value))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP),
-        "f",
-    )
+        return format(rounded, "f")
+    # Below a tenth of a gram the stored precision is kept: the decimal
+    # form of the stored value, so it carries no floating-point noise, no
+    # scientific notation and no truncation to zero. It is bounded to the
+    # depth the workbook's number format can paint, so the two editions
+    # show the same digits for the same mass.
+    return _stored_spelling(value, MASS_FORMAT_DEPTH)
 
 
 def format_weight(value: float | None, unit: str = "g",
@@ -1346,16 +1375,23 @@ def format_percent(value: float | None,
     """
     if value is None:
         return "—"
-    if 0 < abs(value) < 0.1:
-        # A real nonzero percentage must not become zero at display precision.
-        # Decimal from the stored spelling avoids both fixed-place truncation
-        # and scientific notation, without changing any recipe arithmetic.
-        from decimal import Decimal
-        number = format(Decimal(str(value)), "f")
-    elif abs(value - round(value)) < 1e-9:
-        number = f"{int(round(value))}"
+    from decimal import Decimal, ROUND_HALF_UP
+    if value == int(value):
+        # The integrality test is exact on purpose: a tolerance here would
+        # swallow a small but real percentage and print it as zero.
+        number = f"{int(value)}"
+    elif value >= 0.1:
+        # Half away from zero on the fifteen significant digits a
+        # spreadsheet keeps, so the PDF and the workbook agree.
+        rounded = Decimal(f"{value:.15g}").quantize(
+            Decimal("0.1"), rounding=ROUND_HALF_UP
+        )
+        number = format(rounded, "f")
     else:
-        number = f"{value:.1f}"
+        # Below a tenth of a percentage point the stored precision is kept,
+        # written plainly and bounded to the depth the workbook's number
+        # format can paint.
+        number = _stored_spelling(value, PERCENT_FORMAT_DEPTH)
     return f"{localize_decimals(number, language)}%"
 
 
