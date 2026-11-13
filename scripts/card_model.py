@@ -187,6 +187,7 @@ class Derived:
     input_total_g: float = 0.0
     input_complete: bool = True
     input_structure_complete: bool = True
+    declared_input_total_g: float | None = None
     loss_g: float | None = None
     portions: int | None = None
     portion_remainder_g: float | None = None
@@ -198,6 +199,30 @@ class Derived:
         input_total_g remains a legacy arithmetic accumulator for callers.
         Canonical card input_total_g must be null when any mass is unknown.
         """
+        return self.input_total_g
+
+    @property
+    def input_total_known_g(self) -> float | None:
+        """The one input total every edition shows, or None when unknown.
+
+        The declared ``input_total_g`` is the cook's statement about the
+        batch; the card's own ingredient masses are the arithmetic behind
+        that statement. When every mass is established the two must agree,
+        and the ``input-total-mismatch`` blocker says so when they do not.
+        One rule covers every edition:
+
+        * a mass is unresolved -> the total is unknown, and every edition
+          says unknown. The known subtotal stays labeled separately.
+        * every mass is established and a total is declared -> the declared
+          total is the total.
+        * every mass is established and no total is declared -> the sum of
+          the established masses is the total, because that is the only
+          number the card holds.
+        """
+        if not self.input_complete:
+            return None
+        if self.declared_input_total_g is not None:
+            return self.declared_input_total_g
         return self.input_total_g
 
 
@@ -642,15 +667,23 @@ class Card:
         declared_loss = self.data.get("loss_g")
         portion = self.data.get("portion_g")
         declared_portions = self.data.get("portions")
-        input_total = self.data.get("input_total_g")
+        declared_total = self.data.get("input_total_g")
+        if isinstance(declared_total, (int, float)) and not isinstance(declared_total, bool):
+            # A card that states a total is checked against that total, even
+            # when a mass is unresolved and the card is blocked for it.
+            input_total: float | None = float(declared_total)
+        else:
+            # A card that states no total is checked against the sum of the
+            # established masses: that is the total its editions show.
+            input_total = self.derived().input_total_known_g
 
-        if isinstance(usable, (int, float)) and isinstance(input_total, (int, float)):
-            computed_loss = float(input_total) - float(usable)
+        if isinstance(usable, (int, float)) and input_total is not None:
+            computed_loss = input_total - float(usable)
             if computed_loss < -GRAM_EPSILON:
                 out.append(
                     Finding(
                         "yield-exceeds-input",
-                        f"usable_yield_g {usable} g exceeds input_total_g {input_total} g",
+                        f"usable_yield_g {usable} g exceeds the input total {input_total} g",
                         path="usable_yield_g",
                     )
                 )
@@ -1075,9 +1108,15 @@ class Card:
         usable = self.data.get("usable_yield_g")
         portion = self.data.get("portion_g")
         input_total = self.data.get("input_total_g")
+        if isinstance(input_total, (int, float)) and not isinstance(input_total, bool):
+            derived.declared_input_total_g = float(input_total)
 
-        if derived.input_complete and isinstance(usable, (int, float)) and isinstance(input_total, (int, float)):
-            derived.loss_g = float(input_total) - float(usable)
+        # The loss follows the one total every edition shows, so a card that
+        # states no total still reports the same loss the workbook computes.
+        total_known = derived.input_total_known_g
+        if (total_known is not None and isinstance(usable, (int, float))
+                and not isinstance(usable, bool)):
+            derived.loss_g = total_known - float(usable)
         if isinstance(usable, (int, float)) and isinstance(portion, (int, float)):
             derived.portions = int(math.floor(float(usable) / float(portion)))
             derived.portion_remainder_g = float(usable) - derived.portions * float(portion)
@@ -1336,10 +1375,16 @@ __all__ = [
 
 
 def input_mass_label(card: Card, language: str = _LOCALE_DEFAULT) -> str:
-    """Display full input only when known; label partial mass separately."""
+    """Display full input only when known; label partial mass separately.
+
+    The full input is the one total every edition shows: the declared
+    ``input_total_g`` when the card states one, and otherwise the sum of
+    the established masses. A card that states no total and establishes
+    every mass still has a total, and every edition must show it.
+    """
     derived = card.derived()
     if derived.input_complete:
-        return format_weight(card.data.get("input_total_g"), language=language)
+        return format_weight(derived.input_total_known_g, language=language)
     return (
         f"{translate('caption.unknown_input', language)}; "
         f"{translate('caption.known_input_subtotal', language)} "

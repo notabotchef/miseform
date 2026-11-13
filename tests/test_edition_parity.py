@@ -272,3 +272,59 @@ def test_every_source_record_label_is_written_once_in_every_edition(language, tm
         assert f"{label}:" not in markdown, (key, label)
         assert f"<strong>{label}</strong>" in html, (key, label)
         assert label in sheet_text, (key, label)
+
+
+# ------------------------------------------------------- the input total
+
+
+def test_an_absent_declared_total_shows_one_total_in_every_edition(tmp_path):
+    """Every mass is established, so the total is known in every edition.
+
+    The card states no input total. The workbook computed one from the
+    ingredient weights; the reading editions printed a dash. One record
+    must produce one number in all four files.
+    """
+    card = synthetic_card(yeast_g=None, input_total_g=None, loss_g=None)
+    assert card.schema_errors() == []
+    assert card.derived().input_complete
+    codes = {finding.code for finding in card.findings()}
+    assert "input-total-mismatch" not in codes
+
+    pdf = tmp_path / "parity.pdf"
+    assert export_pdf(card, pdf).ok
+    markdown = render_markdown(card)
+    html = render_html(card)
+    pdf_text = extract_pdf_text(pdf)
+
+    workbook = tmp_path / "parity.xlsx"
+    assert export_xlsx(card, workbook).ok
+    total = workbook_row(workbook, "Recipe Card", "Total input")
+    loss = workbook_row(workbook, "Recipe Card", "Loss (g)")
+
+    assert total[2].value == 510
+    assert loss[4].value == 10
+    for text in (markdown, html, pdf_text):
+        assert shown_number(text, "Input") == 510
+        assert shown_number(text, "Transfer loss") == 10
+
+
+def test_an_unknown_mass_keeps_every_edition_unknown(tmp_path):
+    """No edition may show a total that the other editions cannot show."""
+    card = synthetic_card(yeast_g=None, salt_g=None)
+    assert card.schema_errors() == []
+    assert not card.derived().input_complete
+
+    pdf = tmp_path / "parity.pdf"
+    assert export_pdf(card, pdf).ok
+    markdown = render_markdown(card)
+    html = render_html(card)
+    pdf_text = extract_pdf_text(pdf)
+
+    workbook = tmp_path / "parity.xlsx"
+    assert export_xlsx(card, workbook).ok
+    total = workbook_row(workbook, "Recipe Card", "Total input")
+
+    for text in (markdown, html, pdf_text):
+        assert "Input unknown" in text
+        assert "Known mass subtotal (partial) 500 g" in text
+    assert not isinstance(total[2].value, (int, float)), total[2].value
