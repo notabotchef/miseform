@@ -35,7 +35,7 @@ a PDF and an Excel workbook you can print and hand to the next cook.
 </tr>
 </table>
 
-Release 4.0.0. Host-neutral: the same skill runs on any host that follows the
+Release 4.0.1. Host-neutral: the same skill runs on any host that follows the
 Agent Skills specification. Of the four named hosts, Codex, OpenCode and Hermes
 were exercised on one machine and Claude Code was not. The per-host record,
 including the failures, is in [host results](references/host-results.md).

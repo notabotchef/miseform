@@ -2,14 +2,14 @@
 name: miseform
 description: Research-first recipe standardization. Reads a cook's dish photo or notes, maps the whole page into a dish and its components, researches comparable technique and ingredient references, and turns the result into reproducible kitchen recipe cards with weights, volumes, reference percentages, staged methods, and verified library filing.
 metadata:
-  version: "4.0.0"
+  version: "4.0.1"
   license: MIT
   tags: "recipes,cooking,standardization,recipe-cards"
 ---
 
 # Miseform
 
-Release 4.0.0. Use for new dishes, components, assemblies, recipe revisions, and batch scaling. Accept photos, rough recipes, voice transcripts, or combinations. A photo is useful but optional.
+Release 4.0.1. Use for new dishes, components, assemblies, recipe revisions, and batch scaling. Accept photos, rough recipes, voice transcripts, or combinations. A photo is useful but optional.
 
 Miseform is research-first and a document generator second. The cook's own formula is the source of the recipe; published technique is the source of the method. Miseform reads the whole page, maps the dish and its components, researches a small bounded set of comparable recipes and ingredient references, proposes a coherent staged method for that formula and that equipment, and writes a card another cook can repeat. It asks only about what research cannot settle.
 
