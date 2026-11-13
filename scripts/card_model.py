@@ -1170,6 +1170,33 @@ def load_card(path: str | Path) -> Card:
     return Card.load(path)
 
 
+def _weight_number(value: float) -> str:
+    """Return the printed number for a weight.
+
+    Whole grams print without a decimal. A weight of a tenth of a gram or
+    more keeps one decimal, which is the scale a kitchen reads. Below that
+    the stored precision is kept: the number is taken from the decimal
+    form of the stored value, so it carries no floating-point noise, no
+    scientific notation and no truncation to zero.
+    """
+    if abs(value - round(value)) < 1e-9:
+        return f"{int(round(value))}"
+    if abs(value) < 0.1:
+        # A real nonzero weight must not become zero at display precision.
+        # The decimal form of the stored spelling avoids both fixed-place
+        # truncation and scientific notation, and the significant-figure
+        # bound keeps a stored value from becoming a wall of digits.
+        from decimal import Decimal
+        trimmed = Decimal(str(float(f"{value:.6g}"))).normalize()
+        number = format(trimmed, "f")
+        if float(number) == 0.0:
+            # The stored weight is smaller than the display bound. Print it
+            # exactly rather than round it away.
+            number = format(Decimal(str(value)), "f")
+        return number
+    return f"{value:.1f}"
+
+
 def format_weight(value: float | None, unit: str = "g",
                   language: str = _LOCALE_DEFAULT) -> str:
     """Format a weight for display, trimming meaningless decimals.
@@ -1177,13 +1204,18 @@ def format_weight(value: float | None, unit: str = "g",
     The decimal mark follows the language's convention (comma for es/fr/it/
     pt, dot for en); no thousands separator is ever added and the amount is
     never changed. The unit is kept verbatim.
+
+    A weight that is not zero never prints as zero. A mass below a tenth
+    of a gram is a potent ingredient - leavener, salt, extract - and one
+    decimal place would print ``0.0 g`` and tell the cook to add none of
+    it. Such a weight keeps the decimals its own stored precision carries,
+    bounded so the number never becomes a wall of digits, and the bound
+    never rounds the weight away: the printed number is the number the
+    card holds.
     """
     if value is None:
         return "—"
-    if abs(value - round(value)) < 1e-9:
-        number = f"{int(round(value))}"
-    else:
-        number = f"{value:.1f}"
+    number = _weight_number(value)
     return f"{localize_decimals(number, language)} {unit}"
 
 
