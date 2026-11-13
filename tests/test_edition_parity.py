@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -174,6 +176,39 @@ def shown_number(text: str, label: str) -> float:
     return float(match.group(1).replace(",", "."))
 
 
+def decimal_places(number_format: str) -> int:
+    """The decimal places a number format paints."""
+    _, _, fraction = number_format.partition(".")
+    return len(fraction)
+
+
+def displayed_numbers(text: str) -> set[str]:
+    """The numbers a reader sees in a rendered edition."""
+    return set(re.findall(r"\d+(?:\.\d+)?", text))
+
+
+def _find_soffice():
+    """Where LibreOffice's soffice actually is, or None.
+
+    The same lookup the native workbook checks use: the one on PATH
+    first, then the usual install locations, because a headless runner
+    often has LibreOffice installed without putting it on PATH.
+    """
+    found = shutil.which("soffice")
+    if found:
+        return Path(found)
+    for candidate in (
+        "/usr/bin/soffice",
+        "/usr/local/bin/soffice",
+        "/opt/libreoffice/program/soffice",
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+    ):
+        path = Path(candidate)
+        if path.is_file():
+            return path
+    return None
+
+
 # ------------------------------------------------- a weight is never zero
 
 
@@ -224,6 +259,88 @@ def test_workbook_shows_a_potent_ingredient_as_a_nonzero_cell(tmp_path):
     cell = yeast[2]
     assert cell.value == 0.04
     assert displays_nonzero(cell.value, cell.number_format), cell.number_format
+
+
+# --------------------------------- one mass, one number in every edition
+
+
+def test_the_print_and_the_workbook_show_one_number_for_one_mass(tmp_path):
+    """A mass reads as one number in the PDF and in the workbook.
+
+    The card holds 33.333333 g of salt and 0.04 g of yeast. The print
+    reads the salt at the one decimal a kitchen reads and keeps the
+    yeast's own two digits. The workbook must paint those same two
+    numbers, not the stored precision behind them: a cook who scales
+    from the PDF and a cook who scales from the workbook have to weigh
+    the same salt.
+
+    The workbook is rendered through LibreOffice when the host has it,
+    so the check reads what a reader actually sees. Without it the check
+    reads the number format the cell carries and compares it with the
+    decimals the print shows, so the check still runs on every host
+    instead of skipping.
+    """
+    import openpyxl
+
+    card = synthetic_card(salt_g=33.333333, yeast_g=0.04, loss_g=None)
+    assert card.schema_errors() == []
+
+    print_pdf = tmp_path / "print.pdf"
+    assert export_pdf(card, print_pdf).ok
+    print_text = extract_pdf_text(print_pdf)
+    assert shown_number(print_text, "Salt") == 33.3
+    assert shown_number(print_text, "Instant yeast") == 0.04
+    assert shown_number(print_text, "Input") == 533.4
+    assert "33.333333" not in print_text
+    assert not printed_as_zero(print_text)
+
+    workbook = tmp_path / "parity.xlsx"
+    assert export_xlsx(card, workbook).ok
+    book = openpyxl.load_workbook(workbook)
+    sheet = book["Recipe Card"]
+    salt = next(row for row in sheet.iter_rows() if row[1].value == "i2 · Salt")
+    yeast = next(row for row in sheet.iter_rows() if row[1].value == "i3 · Instant yeast")
+    total = next(row for row in sheet.iter_rows() if row[1].value == "Total input")
+
+    # The stored value keeps every digit the cook entered. Only what a
+    # reader sees is rounded.
+    assert salt[2].value == 33.333333
+    assert yeast[2].value == 0.04
+
+    # Each cell paints as many decimals as the print shows for the same
+    # mass: one decimal for a mass of a tenth of a gram or more, the
+    # stored precision for a smaller one. The total is a formula cell
+    # and is held to the same rule.
+    assert decimal_places(salt[2].number_format) == 1
+    assert decimal_places(yeast[2].number_format) == 2
+    assert decimal_places(total[2].number_format) == 1
+    assert displays_nonzero(yeast[2].value, yeast[2].number_format)
+
+    soffice = _find_soffice()
+    if soffice is not None:
+        run = subprocess.run(
+            [
+                str(soffice),
+                "-env:UserInstallation=" + (tmp_path / "profile").as_uri(),
+                "--headless",
+                "--norestore",
+                "--convert-to",
+                "pdf:calc_pdf_Export",
+                "--outdir",
+                str(tmp_path),
+                str(workbook),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+        assert run.returncode == 0, run.stderr
+        numbers = displayed_numbers(extract_pdf_text(tmp_path / "parity.pdf"))
+        assert "33.3" in numbers, sorted(numbers)
+        assert "0.04" in numbers, sorted(numbers)
+        assert "533.4" in numbers, sorted(numbers)
+        assert "33.333333" not in numbers, sorted(numbers)
 
 
 # --------------------------------------------------- source-record labels

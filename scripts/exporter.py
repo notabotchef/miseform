@@ -49,6 +49,7 @@ from card_model import (
     input_mass_label,
     join_blockers,
     row_weight_label,
+    weight_display,
 )
 from translation import display_controls, display_release, display_settings, display_translation, recipe_field
 from locales import (  # noqa: E402
@@ -67,10 +68,31 @@ CHROME_CANDIDATES = [
     "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
 ]
 
-# A gram cell keeps the optional decimal places its weight needs. A fixed
-# one-decimal format shows 0.04 g as 0.0 g, which tells a cook to add none
-# of the leavener, so a gram cell never hides a weight behind a zero.
-GRAM_FORMAT = "0.0#########"
+
+# A gram cell carries the number format that paints its mass the way the
+# print shows it. The format is chosen per cell, because the threshold
+# depends on the mass the cell holds and no single format can express it.
+def gram_format(value: Any) -> str:
+    """Return the number format that paints this mass as the print shows it.
+
+    A mass of a tenth of a gram or more reads at one decimal - the scale a
+    kitchen reads - so the cell carries one decimal place. A smaller mass
+    is a potent ingredient whose stored precision the print keeps, so the
+    cell carries exactly as many optional decimal places as that number
+    has digits. The sheet then paints the same digits the PDF prints, and
+    never paints a real mass as zero.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        # The cell holds a status instead of a mass, so it paints no number
+        # now. A mass of a tenth of a gram or more is the common case if
+        # the workbook recalculates the cell into one.
+        return "0.0"
+    mass = float(value)
+    if mass == 0 or abs(mass) >= 0.1:
+        return "0.0"
+    places = len(weight_display(mass).partition(".")[2])
+    return "0." + "#" * places
+
 
 PDF_FORMAT_A4 = "A4"
 PDF_FORMAT_LETTER = "Letter"
@@ -724,7 +746,7 @@ def export_xlsx(
             weight = resolved.get(row_id)
             if isinstance(weight, (int, float)):
                 put(weight_cell, float(weight))
-                weight_cell.number_format = GRAM_FORMAT
+                weight_cell.number_format = gram_format(weight)
                 row_weights[ing_row] = float(weight)
                 weight_sum += float(weight)
             else:
@@ -836,7 +858,12 @@ def export_xlsx(
             total_formula,
             total_cached,
         )
-    sheet.cell(row=total_row, column=3).number_format = GRAM_FORMAT
+    # The total cell holds a mass when the input is complete and a status
+    # when it is not. The format comes from the number the cell holds, so
+    # the sheet paints the total the way the print shows it.
+    sheet.cell(row=total_row, column=3).number_format = gram_format(
+        total_cached if isinstance(total_cached, (int, float)) else weight_sum
+    )
     sheet.cell(row=total_row, column=4, value="—")
     for col in range(2, 6):
         cell = sheet.cell(row=total_row, column=col)
@@ -859,7 +886,7 @@ def export_xlsx(
         sheet.cell(row=row, column=2, value=translate("caption.known_input_subtotal", language))
         put_formula(sheet.cell(row=row, column=3),
                     f'=SUM(C{first_data_row}:C{total_row - 1})', weight_sum)
-        sheet.cell(row=row, column=3).number_format = GRAM_FORMAT
+        sheet.cell(row=row, column=3).number_format = gram_format(weight_sum)
         row += 2
     caption_note = translate("xlsx.caption_note", language).format(
         basis=basis_label,
@@ -882,7 +909,7 @@ def export_xlsx(
     usable_yield = card.data.get("usable_yield_g")
     sheet.cell(row=row, column=2, value=translate("xlsx.yield_g", language))
     put(sheet.cell(row=row, column=3), usable_yield)
-    sheet.cell(row=row, column=3).number_format = GRAM_FORMAT
+    sheet.cell(row=row, column=3).number_format = gram_format(usable_yield)
     sheet.cell(row=row, column=4, value=translate("xlsx.loss_g", language))
     # The loss is honest only when the input total itself is complete: with
     # an incomplete total, subtracting the yield would report a fabricated
@@ -891,16 +918,24 @@ def export_xlsx(
     # loss follows the total the workbook shows, which is the total every
     # other edition shows too.
     total_complete = input_structure_complete and ingredient_count > 0 and established_count == ingredient_count
+    loss_cached: Any = (
+        effective_total - float(usable_yield)
+        if usable_yield is not None and total_complete and effective_total is not None
+        else ""
+    )
     put_formula(
         sheet.cell(row=row, column=5),
         f'=IF(AND(ISNUMBER(C{total_row}),ISNUMBER(C{row})),C{total_row}-C{row},"")',
-        (
-            effective_total - float(usable_yield)
-            if usable_yield is not None and total_complete and effective_total is not None
-            else ""
-        ),
+        loss_cached,
     )
-    sheet.cell(row=row, column=5).number_format = GRAM_FORMAT
+    # The loss cell paints a mass when the total is complete and nothing
+    # when it is not. Its format comes from the number it holds; with an
+    # incomplete total the established subtotal minus the yield is the best
+    # estimate of the mass the cell will show once the input is complete.
+    sheet.cell(row=row, column=5).number_format = gram_format(
+        loss_cached if isinstance(loss_cached, (int, float))
+        else (weight_sum - float(usable_yield) if usable_yield is not None else "")
+    )
     yield_row = row
     for col in (2, 3, 4, 5):
         sheet.cell(row=row, column=col).font = body_font
@@ -909,7 +944,7 @@ def export_xlsx(
     portion_g = card.data.get("portion_g")
     sheet.cell(row=row, column=2, value=translate("xlsx.portion_g", language))
     put(sheet.cell(row=row, column=3), portion_g)
-    sheet.cell(row=row, column=3).number_format = GRAM_FORMAT
+    sheet.cell(row=row, column=3).number_format = gram_format(portion_g)
     sheet.cell(row=row, column=4, value=translate("xlsx.complete_portions", language))
     complete_portions = (
         int(math.floor(float(usable_yield) / float(portion_g)))
@@ -1153,7 +1188,7 @@ def export_xlsx(
             f"='Recipe Card'!C{card_row}",
             base_weight,
         )
-        base_cell.number_format = GRAM_FORMAT
+        base_cell.number_format = gram_format(base_weight)
         base_cell.font = body_font
         base_cell.alignment = Alignment(horizontal="right")
 
@@ -1168,15 +1203,16 @@ def export_xlsx(
         pct_cell.alignment = Alignment(horizontal="right")
 
         scaled_cell = scaling.cell(row=scale_row, column=5)
+        scaled_mass = base_weight * float(card.data.get("batch_factor", 1) or 1)
         put_formula(
             scaled_cell,
             f'=IF(ISNUMBER($C$6),IF($C$6>0,C{scale_row}*$C$6,"{translate("xlsx.validation.title", language)}"),"{translate("xlsx.validation.title", language)}")',
-            base_weight * float(card.data.get("batch_factor", 1) or 1),
+            scaled_mass,
         )
-        scaled_cell.number_format = GRAM_FORMAT
+        scaled_cell.number_format = gram_format(scaled_mass)
         scaled_cell.font = body_font
         scaled_cell.alignment = Alignment(horizontal="right")
-        scale_sum += base_weight * float(card.data.get("batch_factor", 1) or 1)
+        scale_sum += scaled_mass
         base_sum += base_weight
         scale_ingredient_count += 1
         scale_established_count += 1
@@ -1194,7 +1230,9 @@ def export_xlsx(
                     f'=IF(AND(ISNUMBER($C$6),$C$6>0),SUM(E{scale_first}:E{scale_ingredient_end}),'
                     f'"{translate("xlsx.validation.title", language)}")', scale_sum)
         for column in (3, 5):
-            scaling.cell(row=scale_row, column=column).number_format = GRAM_FORMAT
+            scaling.cell(row=scale_row, column=column).number_format = gram_format(
+                base_sum if column == 3 else scale_sum
+            )
         scale_row += 2
 
     partial_scaling = (translate("xlsx.partial_scaling", language).format(
@@ -1222,7 +1260,9 @@ def export_xlsx(
         base_formula,
         base_cached,
     )
-    scaling.cell(row=scale_total_row, column=3).number_format = GRAM_FORMAT
+    scaling.cell(row=scale_total_row, column=3).number_format = gram_format(
+        base_cached if isinstance(base_cached, (int, float)) else base_sum
+    )
     if scale_ingredient_count > 0:
         guard = "AND(" + structure_guard + "," + ",".join(f"ISNUMBER(E{r})" for r in scale_base_rows) + ")"
         e_formula = (
@@ -1246,7 +1286,9 @@ def export_xlsx(
         e_formula,
         e_cached,
     )
-    scaling.cell(row=scale_total_row, column=5).number_format = GRAM_FORMAT
+    scaling.cell(row=scale_total_row, column=5).number_format = gram_format(
+        e_cached if isinstance(e_cached, (int, float)) else scale_sum
+    )
     if disputed_total is not None:
         # The card states a total and the ingredient weights add up to another
         # one. The Recipe Card sheet shows the stated total, so this sheet
@@ -1304,16 +1346,17 @@ def export_xlsx(
     scale_row += 2
 
     scaling.cell(row=scale_row, column=2, value=translate("xlsx.ref_yield", language))
+    ref_yield_cached = cell_values.get(("Recipe Card", f"C{yield_row}"), "")
     put_formula(
         scaling.cell(row=scale_row, column=3),
         f"=IF(ISNUMBER('Recipe Card'!C{yield_row}),'Recipe Card'!C{yield_row},\"\")",
-        cell_values.get(("Recipe Card", f"C{yield_row}"), ""),
+        ref_yield_cached,
     )
-    scaling.cell(row=scale_row, column=3).number_format = GRAM_FORMAT
+    scaling.cell(row=scale_row, column=3).number_format = gram_format(ref_yield_cached)
     scale_row += 1
     scaling.cell(row=scale_row, column=2, value=translate("xlsx.ref_portion", language))
     put(scaling.cell(row=scale_row, column=3), card.data.get("portion_g"))
-    scaling.cell(row=scale_row, column=3).number_format = GRAM_FORMAT
+    scaling.cell(row=scale_row, column=3).number_format = gram_format(card.data.get("portion_g"))
     scale_row += 1
     scaling.cell(row=scale_row, column=2, value=translate("xlsx.ref_portions", language))
     put_formula(

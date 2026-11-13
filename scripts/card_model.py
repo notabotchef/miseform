@@ -1209,31 +1209,59 @@ def load_card(path: str | Path) -> Card:
     return Card.load(path)
 
 
-def _weight_number(value: float) -> str:
-    """Return the printed number for a weight.
+def _significant_places(value: float) -> int:
+    """Return the decimal places that keep six significant digits.
 
-    Whole grams print without a decimal. A weight of a tenth of a gram or
-    more keeps one decimal, which is the scale a kitchen reads. Below that
+    The bound is what keeps a stored value from becoming a wall of digits
+    on the page; it never rounds the value away, because the places are
+    counted from the value's own magnitude.
+    """
+    exponent = math.floor(math.log10(abs(value)))
+    return max(1, 6 - (exponent + 1))
+
+
+def weight_display(value: float) -> str:
+    """Return the number a reader sees for a weight, without its unit.
+
+    One rule covers every edition. A weight of a tenth of a gram or more
+    reads at one decimal, which is the scale a kitchen reads. Below that
     the stored precision is kept: the number is taken from the decimal
     form of the stored value, so it carries no floating-point noise, no
-    scientific notation and no truncation to zero.
+    scientific notation and no truncation to zero. A whole number of grams
+    reads as that whole number.
+
+    The last digit is rounded the way a spreadsheet rounds it - half away
+    from zero, on the decimal spelling of the stored value - because the
+    workbook paints a weight with a number format and a spreadsheet
+    rounds that way. Rounding the print the same way is what keeps the
+    PDF and the workbook from disagreeing about the last digit.
     """
     if abs(value - round(value)) < 1e-9:
         return f"{int(round(value))}"
+    from decimal import Decimal, ROUND_HALF_UP
     if abs(value) < 0.1:
         # A real nonzero weight must not become zero at display precision.
         # The decimal form of the stored spelling avoids both fixed-place
         # truncation and scientific notation, and the significant-figure
         # bound keeps a stored value from becoming a wall of digits.
-        from decimal import Decimal
-        trimmed = Decimal(str(float(f"{value:.6g}"))).normalize()
-        number = format(trimmed, "f")
+        places = _significant_places(value)
+        number = format(
+            Decimal(repr(float(value))).quantize(
+                Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP
+            ),
+            "f",
+        )
+        if "." in number:
+            number = number.rstrip("0").rstrip(".")
         if float(number) == 0.0:
             # The stored weight is smaller than the display bound. Print it
             # exactly rather than round it away.
             number = format(Decimal(str(value)), "f")
         return number
-    return f"{value:.1f}"
+    return format(
+        Decimal(repr(float(value))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP),
+        "f",
+    )
 
 
 def format_weight(value: float | None, unit: str = "g",
@@ -1254,7 +1282,7 @@ def format_weight(value: float | None, unit: str = "g",
     """
     if value is None:
         return "—"
-    number = _weight_number(value)
+    number = weight_display(value)
     return f"{localize_decimals(number, language)} {unit}"
 
 
