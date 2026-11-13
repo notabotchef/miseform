@@ -37,8 +37,43 @@ from render_markdown import render_markdown  # noqa: E402
 EXAMPLE = ROOT / "examples" / "sesame-salt-garnish.card.json"
 
 
-def synthetic_card(**overrides) -> Card:
-    """A synthetic card: 500 g flour, 10 g salt, 0.04 g instant yeast."""
+def synthetic_card(yeast_g: float | None = 0.04, salt_g: float | None = 10,
+                   **overrides) -> Card:
+    """A synthetic card: 500 g flour, 10 g salt, 0.04 g instant yeast.
+
+    ``yeast_g`` and ``salt_g`` set the two small weights; ``None`` leaves
+    that mass unestablished, which is what an unknown mass looks like on a
+    real card. Every other field is overridable.
+    """
+    ingredients = [{"row_id": "i1", "name": "Flour", "weight_g": 500}]
+    if salt_g is None:
+        ingredients.append(
+            {
+                "row_id": "i2",
+                "name": "Salt",
+                "weight_g": None,
+                "quantity": {
+                    "amount": 1,
+                    "unit": "tsp",
+                    "convention": "US",
+                    "original": "1 tsp",
+                },
+            }
+        )
+    else:
+        ingredients.append({"row_id": "i2", "name": "Salt", "weight_g": salt_g})
+    if yeast_g is not None:
+        ingredients.append(
+            {"row_id": "i3", "name": "Instant yeast", "weight_g": yeast_g}
+        )
+
+    established = all(row.get("weight_g") is not None for row in ingredients)
+    total = sum(
+        float(row["weight_g"])
+        for row in ingredients
+        if row.get("weight_g") is not None
+    )
+
     data = {
         "recipe_id": "DEMO-PARITY",
         "title": "PARITY PROOF CARD",
@@ -77,18 +112,14 @@ def synthetic_card(**overrides) -> Card:
                 "name": "Dough",
                 "reference_row_id": "i1",
                 "reference_weight_g": 500,
-                "ingredients": [
-                    {"row_id": "i1", "name": "Flour", "weight_g": 500},
-                    {"row_id": "i2", "name": "Salt", "weight_g": 10},
-                    {"row_id": "i3", "name": "Instant yeast", "weight_g": 0.04},
-                ],
+                "ingredients": ingredients,
             }
         ],
-        "input_total_g": 510.04,
-        "usable_yield_g": 500,
-        "loss_g": 10.04,
-        "portion_g": 50,
-        "portions": 10,
+        "input_total_g": total if established else None,
+        "usable_yield_g": 500 if established else None,
+        "loss_g": round(total - 500, 2) if established else None,
+        "portion_g": 50 if established else None,
+        "portions": 10 if established else None,
         "stages": [
             {
                 "name": "MIX",
@@ -125,15 +156,22 @@ def printed_as_zero(text: str) -> bool:
 
 
 def workbook_row(workbook, sheet_name: str, label: str):
-    """Return the row whose label cell holds ``label``."""
+    """Return the row that carries ``label`` in any of its label cells."""
     import openpyxl
 
     book = openpyxl.load_workbook(workbook, data_only=True)
     sheet = book[sheet_name]
     for row in sheet.iter_rows():
-        if row[1].value == label:
+        if any(cell.value == label for cell in row[:5]):
             return row
     raise AssertionError(f"no row labelled {label!r} in {sheet_name}")
+
+
+def shown_number(text: str, label: str) -> float:
+    """Read the number a reader sees after ``label`` in an edition."""
+    match = re.search(re.escape(label) + r"\s+([0-9]+(?:[.,][0-9]+)?)\s*g", text)
+    assert match, f"{label!r} carries no number in:\n{text[:600]}"
+    return float(match.group(1).replace(",", "."))
 
 
 # ------------------------------------------------- a weight is never zero
@@ -186,3 +224,51 @@ def test_workbook_shows_a_potent_ingredient_as_a_nonzero_cell(tmp_path):
     cell = yeast[2]
     assert cell.value == 0.04
     assert displays_nonzero(cell.value, cell.number_format), cell.number_format
+
+
+# --------------------------------------------------- source-record labels
+
+
+def test_markdown_source_record_labels_carry_one_colon():
+    """The locale table owns the label text, colon included."""
+    markdown = render_markdown(synthetic_card())
+    assert "**Evidence:**" in markdown
+    assert "**Validation:**" in markdown
+    assert "**Filing:**" in markdown
+    for label in ("Evidence", "Validation", "Filing"):
+        assert f"**{label}::**" not in markdown
+
+
+@pytest.mark.parametrize("language", ["en", "es", "fr", "it", "pt"])
+def test_every_source_record_label_is_written_once_in_every_edition(language, tmp_path):
+    """No edition may double or drop the colon of a source-record label."""
+    from locales import MESSAGES
+
+    labels = {
+        key: table[language]
+        for key, table in MESSAGES.items()
+        if key.startswith("trace.")
+    }
+    assert labels
+
+    card = synthetic_card()
+    markdown = render_markdown(card, language=language)
+    html = render_html(card, language=language)
+    workbook = tmp_path / "labels.xlsx"
+    assert export_xlsx(card, workbook, language=language).ok
+
+    import openpyxl
+
+    book = openpyxl.load_workbook(workbook, data_only=True)
+    sheet_text = "\n".join(
+        str(cell.value)
+        for row in book["Recipe Card"].iter_rows()
+        for cell in row
+        if cell.value is not None
+    )
+    for key, label in labels.items():
+        assert label.endswith(":"), (key, label)
+        assert f"**{label}**" in markdown, (key, label)
+        assert f"{label}:" not in markdown, (key, label)
+        assert f"<strong>{label}</strong>" in html, (key, label)
+        assert label in sheet_text, (key, label)
