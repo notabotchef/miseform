@@ -328,3 +328,58 @@ def test_an_unknown_mass_keeps_every_edition_unknown(tmp_path):
         assert "Input unknown" in text
         assert "Known mass subtotal (partial) 500 g" in text
     assert not isinstance(total[2].value, (int, float)), total[2].value
+
+
+# --------------------------------------------- a disputed declared total
+
+
+def test_a_wrong_declared_total_is_one_number_in_every_edition(tmp_path):
+    """A declared total that is wrong is a blocked card, not a second truth.
+
+    The card states the total and every edition shows it. The workbook
+    must not publish a different number under the same filename stem.
+    """
+    card = synthetic_card(yeast_g=None, input_total_g=530, loss_g=None)
+    codes = {finding.code for finding in card.findings()}
+    assert "input-total-mismatch" in codes
+
+    pdf = tmp_path / "parity.pdf"
+    assert export_pdf(card, pdf).ok
+    markdown = render_markdown(card)
+    html = render_html(card)
+    pdf_text = extract_pdf_text(pdf)
+
+    workbook = tmp_path / "parity.xlsx"
+    assert export_xlsx(card, workbook).ok
+    total = workbook_row(workbook, "Recipe Card", "Total input")
+    loss = workbook_row(workbook, "Recipe Card", "Loss (g)")
+
+    assert total[2].value == 530
+    assert loss[4].value == 30
+    for text in (markdown, html, pdf_text):
+        assert shown_number(text, "Input") == 530
+        assert shown_number(text, "Transfer loss") == 30
+
+
+def test_the_workbook_names_a_total_it_refuses_to_recalculate(tmp_path):
+    """A disagreement the workbook knows about is never silent."""
+    from locales import translate
+
+    card = synthetic_card(yeast_g=None, input_total_g=530, loss_g=None)
+    workbook = tmp_path / "parity.xlsx"
+    assert export_xlsx(card, workbook).ok
+
+    import openpyxl
+
+    book = openpyxl.load_workbook(workbook, data_only=True)
+    text = "\n".join(
+        str(cell.value)
+        for sheet in book
+        for row in sheet.iter_rows()
+        for cell in row
+        if cell.value is not None
+    )
+    note = translate("xlsx.input_total_mismatch", "en").format(
+        declared=format_weight(530), sum=format_weight(510)
+    )
+    assert note in text

@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from card_model import (
+    GRAM_EPSILON,
     LABELING_KEYS,
     RELEASE_WARNING,
     Card,
@@ -782,29 +783,59 @@ def export_xlsx(
         else translate("xlsx.ambiguous_input", language))
     total_row = row
     sheet.cell(row=total_row, column=2, value=translate("xlsx.total_input", language))
+    # The card states the input total; the workbook can also compute one
+    # from the weight cells. When the two disagree the card is blocked, and
+    # the workbook refuses to publish a second, different total in silence.
+    # It shows the total the card states and names the disagreement.
+    declared_total = card.derived().declared_input_total_g
+    effective_total = card.derived().input_total_known_g
+    total_is_complete = (
+        input_structure_complete and ingredient_count > 0
+        and established_count == ingredient_count
+    )
+    mismatch_note = ""
+    disputed_total: float | None = None
+    if (
+        declared_total is not None
+        and total_is_complete
+        and not math.isclose(float(declared_total), weight_sum, abs_tol=GRAM_EPSILON)
+    ):
+        disputed_total = float(declared_total)
+        mismatch_note = translate("xlsx.input_total_mismatch", language).format(
+            declared=format_weight(declared_total, language=language),
+            sum=format_weight(weight_sum, language=language),
+        )
     # A total is honest only when every ingredient mass is established. A row
     # the cook supplied as a quantity in their own unit contributes no weighed
     # mass, so the SUM would silently undercount. Guard the formula and cache
     # an explicit partial subtotal instead of a completed total.
-    if ingredient_count > 0:
-        guard = "AND(" + structure_guard + "," + ",".join(f"ISNUMBER(C{sheet_row})" for _, sheet_row in ingredient_rows) + ")"
-        total_formula = (
-            f'=IF({guard},SUM(C{first_data_row}:C{total_row - 1}),'
-            f'"{partial_input}")'
-        )
-        total_cached: Any = (
-            weight_sum
-            if input_structure_complete and established_count == ingredient_count
-            else partial_input
-        )
+    if disputed_total is not None:
+        # The card states a total and the weight cells add up to another one.
+        # The stated total is what the reading editions show, so the workbook
+        # shows it too instead of a recomputed number under the same filename
+        # stem. The disagreement is named in the caption below.
+        total_cached: Any = disputed_total
+        put(sheet.cell(row=total_row, column=3), total_cached)
     else:
-        total_formula = f'"{translate("xlsx.no_input", language)}"'
-        total_cached = translate("xlsx.no_input", language)
-    put_formula(
-        sheet.cell(row=total_row, column=3),
-        total_formula,
-        total_cached,
-    )
+        if ingredient_count > 0:
+            guard = "AND(" + structure_guard + "," + ",".join(f"ISNUMBER(C{sheet_row})" for _, sheet_row in ingredient_rows) + ")"
+            total_formula = (
+                f'=IF({guard},SUM(C{first_data_row}:C{total_row - 1}),'
+                f'"{partial_input}")'
+            )
+            total_cached: Any = (
+                weight_sum
+                if input_structure_complete and established_count == ingredient_count
+                else partial_input
+            )
+        else:
+            total_formula = f'"{translate("xlsx.no_input", language)}"'
+            total_cached = translate("xlsx.no_input", language)
+        put_formula(
+            sheet.cell(row=total_row, column=3),
+            total_formula,
+            total_cached,
+        )
     sheet.cell(row=total_row, column=3).number_format = GRAM_FORMAT
     sheet.cell(row=total_row, column=4, value="—")
     for col in range(2, 6):
@@ -830,13 +861,19 @@ def export_xlsx(
                     f'=SUM(C{first_data_row}:C{total_row - 1})', weight_sum)
         sheet.cell(row=row, column=3).number_format = GRAM_FORMAT
         row += 2
+    caption_note = translate("xlsx.caption_note", language).format(
+        basis=basis_label,
+        input=input_mass_label(card, language),
+    )
+    if mismatch_note:
+        # A total the card states and the ingredient weights disagree on is
+        # never left for the reader to work out: the workbook names both
+        # numbers and says which is which.
+        caption_note = f"{caption_note} {mismatch_note}"
     merged_text(
         sheet,
         row,
-        translate("xlsx.caption_note", language).format(
-            basis=basis_label,
-            input=input_mass_label(card, language),
-        ),
+        caption_note,
         36,
         Font(name=palette.body_font, size=10, color=caption_c),
     )
@@ -850,14 +887,16 @@ def export_xlsx(
     # The loss is honest only when the input total itself is complete: with
     # an incomplete total, subtracting the yield would report a fabricated
     # number. The formula guards on ISNUMBER(C_total), so the cached value
-    # must guard the same way and stay empty when the total is partial.
+    # must guard the same way and stay empty when the total is partial. The
+    # loss follows the total the workbook shows, which is the total every
+    # other edition shows too.
     total_complete = input_structure_complete and ingredient_count > 0 and established_count == ingredient_count
     put_formula(
         sheet.cell(row=row, column=5),
         f'=IF(AND(ISNUMBER(C{total_row}),ISNUMBER(C{row})),C{total_row}-C{row},"")',
         (
-            weight_sum - float(usable_yield)
-            if usable_yield is not None and total_complete
+            effective_total - float(usable_yield)
+            if usable_yield is not None and total_complete and effective_total is not None
             else ""
         ),
     )
@@ -1208,6 +1247,27 @@ def export_xlsx(
         e_cached,
     )
     scaling.cell(row=scale_total_row, column=5).number_format = GRAM_FORMAT
+    if disputed_total is not None:
+        # The card states a total and the ingredient weights add up to another
+        # one. The Recipe Card sheet shows the stated total, so this sheet
+        # does not publish a second total under the same name: it names the
+        # disagreement instead, the way it names an ambiguous input. The
+        # formula keeps the cell a formula cell, so the workbook ships the
+        # note as a cached result a reader can see.
+        base_formula = f'="{mismatch_note}"'
+        base_cached = mismatch_note
+        e_formula = f'="{mismatch_note}"'
+        e_cached = mismatch_note
+        put_formula(
+            scaling.cell(row=scale_total_row, column=3),
+            base_formula,
+            base_cached,
+        )
+        put_formula(
+            scaling.cell(row=scale_total_row, column=5),
+            e_formula,
+            e_cached,
+        )
     for col in range(2, 6):
         cell = scaling.cell(row=scale_total_row, column=col)
         cell.fill = PatternFill("solid", fgColor=pale)

@@ -512,6 +512,28 @@ MESSAGES: dict[str, dict[str, str]] = {
         "it": 'Input totale (g)',
         "pt": 'Entrada total (g)',
     },
+    "xlsx.input_total_mismatch": {
+        "en": (
+            "Declared input total {declared} does not equal the sum of the "
+            "established ingredient weights {sum}."
+        ),
+        "es": (
+            "El total de entrada declarado {declared} no coincide con la suma "
+            "de las masas de ingredientes establecidas {sum}."
+        ),
+        "fr": (
+            "Le total des intrants déclaré {declared} ne correspond pas à la "
+            "somme des masses d'ingrédients établies {sum}."
+        ),
+        "it": (
+            "L'input totale dichiarato {declared} non coincide con la somma "
+            "delle masse di ingredienti stabilite {sum}."
+        ),
+        "pt": (
+            "O total de entrada declarado {declared} não coincide com a soma "
+            "das massas de ingredientes estabelecidas {sum}."
+        ),
+    },
 
     "xlsx.caption_note": {
         "en": (
