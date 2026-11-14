@@ -187,6 +187,7 @@ class Derived:
     input_total_g: float = 0.0
     input_complete: bool = True
     input_structure_complete: bool = True
+    declared_input_total_g: float | None = None
     loss_g: float | None = None
     portions: int | None = None
     portion_remainder_g: float | None = None
@@ -198,6 +199,30 @@ class Derived:
         input_total_g remains a legacy arithmetic accumulator for callers.
         Canonical card input_total_g must be null when any mass is unknown.
         """
+        return self.input_total_g
+
+    @property
+    def input_total_known_g(self) -> float | None:
+        """The one input total every edition shows, or None when unknown.
+
+        The declared ``input_total_g`` is the cook's statement about the
+        batch; the card's own ingredient masses are the arithmetic behind
+        that statement. When every mass is established the two must agree,
+        and the ``input-total-mismatch`` blocker says so when they do not.
+        One rule covers every edition:
+
+        * a mass is unresolved -> the total is unknown, and every edition
+          says unknown. The known subtotal stays labeled separately.
+        * every mass is established and a total is declared -> the declared
+          total is the total.
+        * every mass is established and no total is declared -> the sum of
+          the established masses is the total, because that is the only
+          number the card holds.
+        """
+        if not self.input_complete:
+            return None
+        if self.declared_input_total_g is not None:
+            return self.declared_input_total_g
         return self.input_total_g
 
 
@@ -642,15 +667,23 @@ class Card:
         declared_loss = self.data.get("loss_g")
         portion = self.data.get("portion_g")
         declared_portions = self.data.get("portions")
-        input_total = self.data.get("input_total_g")
+        declared_total = self.data.get("input_total_g")
+        if isinstance(declared_total, (int, float)) and not isinstance(declared_total, bool):
+            # A card that states a total is checked against that total, even
+            # when a mass is unresolved and the card is blocked for it.
+            input_total: float | None = float(declared_total)
+        else:
+            # A card that states no total is checked against the sum of the
+            # established masses: that is the total its editions show.
+            input_total = self.derived().input_total_known_g
 
-        if isinstance(usable, (int, float)) and isinstance(input_total, (int, float)):
-            computed_loss = float(input_total) - float(usable)
+        if isinstance(usable, (int, float)) and input_total is not None:
+            computed_loss = input_total - float(usable)
             if computed_loss < -GRAM_EPSILON:
                 out.append(
                     Finding(
                         "yield-exceeds-input",
-                        f"usable_yield_g {usable} g exceeds input_total_g {input_total} g",
+                        f"usable_yield_g {usable} g exceeds the input total {input_total} g",
                         path="usable_yield_g",
                     )
                 )
@@ -1075,9 +1108,15 @@ class Card:
         usable = self.data.get("usable_yield_g")
         portion = self.data.get("portion_g")
         input_total = self.data.get("input_total_g")
+        if isinstance(input_total, (int, float)) and not isinstance(input_total, bool):
+            derived.declared_input_total_g = float(input_total)
 
-        if derived.input_complete and isinstance(usable, (int, float)) and isinstance(input_total, (int, float)):
-            derived.loss_g = float(input_total) - float(usable)
+        # The loss follows the one total every edition shows, so a card that
+        # states no total still reports the same loss the workbook computes.
+        total_known = derived.input_total_known_g
+        if (total_known is not None and isinstance(usable, (int, float))
+                and not isinstance(usable, bool)):
+            derived.loss_g = total_known - float(usable)
         if isinstance(usable, (int, float)) and isinstance(portion, (int, float)):
             derived.portions = int(math.floor(float(usable) / float(portion)))
             derived.portion_remainder_g = float(usable) - derived.portions * float(portion)
@@ -1170,6 +1209,90 @@ def load_card(path: str | Path) -> Card:
     return Card.load(path)
 
 
+def _significant_places(value: float) -> int:
+    """Return the decimal places that keep six significant digits.
+
+    The bound is what keeps a stored value from becoming a wall of digits
+    on the page; it never rounds the value away, because the places are
+    counted from the value's own magnitude.
+    """
+    exponent = math.floor(math.log10(abs(value)))
+    return max(1, 6 - (exponent + 1))
+
+
+# The depth each column's workbook number format can paint, in decimal
+# places. The reading editions are bounded by the same numbers so the two
+# sides of a card show the same digits for the same mass.
+MASS_FORMAT_DEPTH = 19
+PERCENT_FORMAT_DEPTH = 13
+
+
+def _stored_spelling(value: float, depth: int) -> str:
+    """Return a value's own decimal spelling, bounded to ``depth`` places.
+
+    A real nonzero number never becomes zero here, and the result carries
+    no scientific notation and no floating-point noise: the value is first
+    carried through the fifteen significant digits a spreadsheet keeps.
+    """
+    from decimal import Decimal
+    number = Decimal(f"{value:.15g}")
+    if number == 0:
+        # The value is smaller than the significant-digit bound. Use its own
+        # spelling rather than round it away.
+        number = Decimal(repr(value))
+    text = format(number, "f")
+    if "." in text:
+        whole, fraction = text.split(".", 1)
+        fraction = fraction[:depth]
+        fraction = fraction.rstrip("0")
+        text = f"{whole}.{fraction}" if fraction else whole
+    return text
+
+
+def weight_display(value: float) -> str:
+    """Return the number a reader sees for a weight, without its unit.
+
+    One rule covers every edition. A weight of a tenth of a gram or more
+    reads at one decimal, which is the scale a kitchen reads. Below that
+    the stored precision is kept: the number is taken from the decimal
+    form of the stored value, so it carries no floating-point noise, no
+    scientific notation and no truncation to zero. A whole number of grams
+    reads as that whole number.
+
+    The last digit is rounded the way a spreadsheet rounds it - half away
+    from zero, on the decimal spelling of the stored value - because the
+    workbook paints a weight with a number format and a spreadsheet
+    rounds that way. Rounding the print the same way is what keeps the
+    PDF and the workbook from disagreeing about the last digit.
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+    if value == int(value):
+        # The integrality test is exact on purpose. A tolerance here would
+        # swallow every mass below a nanogram and print it as zero, which is
+        # the one thing a potent ingredient must never read as.
+        return f"{int(value)}"
+    if value >= 0.1:
+        # A mass of a tenth of a gram or more reads at one decimal, which
+        # is the scale a kitchen reads. The branch tests the value itself,
+        # not its absolute value, because the workbook's number format
+        # branches the same way.
+        #
+        # The rounding is half away from zero on the decimal spelling, and
+        # the value is first carried through the fifteen significant digits
+        # a spreadsheet keeps. A spreadsheet rounds that way, so this is
+        # what makes the PDF and the workbook agree on the last digit.
+        rounded = Decimal(f"{value:.15g}").quantize(
+            Decimal("0.1"), rounding=ROUND_HALF_UP
+        )
+        return format(rounded, "f")
+    # Below a tenth of a gram the stored precision is kept: the decimal
+    # form of the stored value, so it carries no floating-point noise, no
+    # scientific notation and no truncation to zero. It is bounded to the
+    # depth the workbook's number format can paint, so the two editions
+    # show the same digits for the same mass.
+    return _stored_spelling(value, MASS_FORMAT_DEPTH)
+
+
 def format_weight(value: float | None, unit: str = "g",
                   language: str = _LOCALE_DEFAULT) -> str:
     """Format a weight for display, trimming meaningless decimals.
@@ -1177,13 +1300,18 @@ def format_weight(value: float | None, unit: str = "g",
     The decimal mark follows the language's convention (comma for es/fr/it/
     pt, dot for en); no thousands separator is ever added and the amount is
     never changed. The unit is kept verbatim.
+
+    A weight that is not zero never prints as zero. A mass below a tenth
+    of a gram is a potent ingredient - leavener, salt, extract - and one
+    decimal place would print ``0.0 g`` and tell the cook to add none of
+    it. Such a weight keeps the decimals its own stored precision carries,
+    bounded so the number never becomes a wall of digits, and the bound
+    never rounds the weight away: the printed number is the number the
+    card holds.
     """
     if value is None:
         return "—"
-    if abs(value - round(value)) < 1e-9:
-        number = f"{int(round(value))}"
-    else:
-        number = f"{value:.1f}"
+    number = weight_display(value)
     return f"{localize_decimals(number, language)} {unit}"
 
 
@@ -1247,16 +1375,23 @@ def format_percent(value: float | None,
     """
     if value is None:
         return "—"
-    if 0 < abs(value) < 0.1:
-        # A real nonzero percentage must not become zero at display precision.
-        # Decimal from the stored spelling avoids both fixed-place truncation
-        # and scientific notation, without changing any recipe arithmetic.
-        from decimal import Decimal
-        number = format(Decimal(str(value)), "f")
-    elif abs(value - round(value)) < 1e-9:
-        number = f"{int(round(value))}"
+    from decimal import Decimal, ROUND_HALF_UP
+    if value == int(value):
+        # The integrality test is exact on purpose: a tolerance here would
+        # swallow a small but real percentage and print it as zero.
+        number = f"{int(value)}"
+    elif value >= 0.1:
+        # Half away from zero on the fifteen significant digits a
+        # spreadsheet keeps, so the PDF and the workbook agree.
+        rounded = Decimal(f"{value:.15g}").quantize(
+            Decimal("0.1"), rounding=ROUND_HALF_UP
+        )
+        number = format(rounded, "f")
     else:
-        number = f"{value:.1f}"
+        # Below a tenth of a percentage point the stored precision is kept,
+        # written plainly and bounded to the depth the workbook's number
+        # format can paint.
+        number = _stored_spelling(value, PERCENT_FORMAT_DEPTH)
     return f"{localize_decimals(number, language)}%"
 
 
@@ -1304,10 +1439,16 @@ __all__ = [
 
 
 def input_mass_label(card: Card, language: str = _LOCALE_DEFAULT) -> str:
-    """Display full input only when known; label partial mass separately."""
+    """Display full input only when known; label partial mass separately.
+
+    The full input is the one total every edition shows: the declared
+    ``input_total_g`` when the card states one, and otherwise the sum of
+    the established masses. A card that states no total and establishes
+    every mass still has a total, and every edition must show it.
+    """
     derived = card.derived()
     if derived.input_complete:
-        return format_weight(card.data.get("input_total_g"), language=language)
+        return format_weight(derived.input_total_known_g, language=language)
     return (
         f"{translate('caption.unknown_input', language)}; "
         f"{translate('caption.known_input_subtotal', language)} "

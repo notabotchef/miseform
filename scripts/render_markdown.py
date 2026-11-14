@@ -226,7 +226,9 @@ def render_markdown(card: Card, language: str = DEFAULT_LANGUAGE,
         for label, key in (("Evidence", "evidence"), ("Validation", "validation"), ("Filing", "filing")):
             value = recipe_field(texts, f"provenance.{key}", provenance.get(key))
             if value:
-                lines.append(f"**{translate('trace.' + key, language)}:** {value}")
+                # The locale table owns the label text, colon included, so the
+                # Markdown master must not add a second one.
+                lines.append(f"**{translate('trace.' + key, language)}** {value}")
                 lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

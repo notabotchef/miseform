@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-MIT-black?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?style=flat-square)](https://www.python.org)
 [![Checks](https://img.shields.io/github/actions/workflow/status/notabotchef/miseform/checks.yml?style=flat-square)](https://github.com/notabotchef/miseform/actions/workflows/checks.yml)
-[![Tests](https://img.shields.io/badge/tests-639%20passed-brightgreen?style=flat-square)](https://github.com/notabotchef/miseform/actions/workflows/checks.yml)
+[![Tests](https://img.shields.io/badge/tests-657%20passed-brightgreen?style=flat-square)](https://github.com/notabotchef/miseform/actions/workflows/checks.yml)
 
 A photo of your recipe. A card another cook can actually execute.
 
@@ -35,7 +35,7 @@ a PDF and an Excel workbook you can print and hand to the next cook.
 </tr>
 </table>
 
-Release 4.0.0. Host-neutral: the same skill runs on any host that follows the
+Release 4.0.1. Host-neutral: the same skill runs on any host that follows the
 Agent Skills specification. Of the four named hosts, Codex, OpenCode and Hermes
 were exercised on one machine and Claude Code was not. The per-host record,
 including the failures, is in [host results](references/host-results.md).
